@@ -90,7 +90,7 @@ class content extends content_base {
                         }
 
                         // LOG: Đang kiểm tra module nào
-                        $this->console_log("Checking Module: " . $cmdata->cmitem->name);
+                        // $this->console_log("Checking Module: " . $cmdata->cmitem->name);
 
                         // Check if student can access this module.
                         $can_view_module = \format_adaptive1\utils::check_module_conditions($course, $userid, $cm, $section);
