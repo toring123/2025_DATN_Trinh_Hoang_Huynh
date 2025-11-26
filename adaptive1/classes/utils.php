@@ -32,7 +32,7 @@ class utils {
 
         $json_data = json_encode($data);
         // In ra script JS tô màu xanh lá cây để dễ nhìn
-        echo "<script>console.log('%c[ADAPTIVE] $label', 'color: #00AA00; font-weight: bold;', $json_data);</script>";
+        // echo "<script>console.log('%c[ADAPTIVE] $label', 'color: #00AA00; font-weight: bold;', $json_data);</script>";
     }
 
     /**

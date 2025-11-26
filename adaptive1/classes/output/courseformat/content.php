@@ -75,40 +75,40 @@ class content extends content_base {
                 }
 
                 // Filter modules within this section.
-                if (!empty($sectiondata->cmlist->cms)) {
-                    $filteredcms = [];
+                // if (!empty($sectiondata->cmlist->cms)) {
+                //     $filteredcms = [];
 
-                    foreach ($sectiondata->cmlist->cms as $cmdata) {
-                        // Get course module object.
-                        // $cmitem = $cmdata->cmitem;
-                        $cm = $modinfo->get_cm($cmdata->cmitem->id);
+                //     foreach ($sectiondata->cmlist->cms as $cmdata) {
+                //         // Get course module object.
+                //         // $cmitem = $cmdata->cmitem;
+                //         $cm = $modinfo->get_cm($cmdata->cmitem->id);
 
-                        // $this->console_log("Checking Module: " . $cm);
-                        if (!$cm) { 
-                            $this->console_log("Không có cm");
-                            continue; 
-                        }
+                //         // $this->console_log("Checking Module: " . $cm);
+                //         if (!$cm) { 
+                //             $this->console_log("Không có cm");
+                //             continue; 
+                //         }
 
-                        // LOG: Đang kiểm tra module nào
-                        // $this->console_log("Checking Module: " . $cmdata->cmitem->name);
+                //         // LOG: Đang kiểm tra module nào
+                //         // $this->console_log("Checking Module: " . $cmdata->cmitem->name);
 
-                        // Check if student can access this module.
-                        $can_view_module = \format_adaptive1\utils::check_module_conditions($course, $userid, $cm, $section);
+                //         // Check if student can access this module.
+                //         $can_view_module = \format_adaptive1\utils::check_module_conditions($course, $userid, $cm, $section);
 
-                        if (!$can_view_module) {
-                            // Log module bị ẩn -> Đây là chỗ quan trọng bạn cần xem
-                            $this->console_log("--> Module HIDDEN (Removed form list): " . $cmdata->cmitem->name);
-                            continue;
-                        }
+                //         if (!$can_view_module) {
+                //             // Log module bị ẩn -> Đây là chỗ quan trọng bạn cần xem
+                //             $this->console_log("--> Module HIDDEN (Removed form list): " . $cmdata->cmitem->name);
+                //             continue;
+                //         }
 
-                        $filteredcms[] = $cmdata;
-                    }
+                //         $filteredcms[] = $cmdata;
+                //     }
 
-                    // Re-index the cms array.
-                    $sectiondata->cmlist->cms = array_values($filteredcms);
-                } else{
-                    $this->console_log("Không có module trong section", $sectiondata->num);
-                }
+                //     // Re-index the cms array.
+                //     $sectiondata->cmlist->cms = array_values($filteredcms);
+                // } else{
+                //     $this->console_log("Không có module trong section", $sectiondata->num);
+                // }
 
                 $filteredsections[] = $sectiondata;
             }
