@@ -29,30 +29,19 @@ class observer {
      * @return void
      */
     public static function course_module_created(course_module_created $event): void {
-        global $DB;
-
         // Only process assign modules.
         if ($event->other['modulename'] !== 'assign') {
             return;
         }
 
-        $cmid = $event->objectid;
+        $cmid = (int)$event->objectid;
         if ($cmid <= 0) {
             return;
         }
 
-        // Get the autograding option from the form data.
-        $data = $event->other['instanceid'] ?? null;
-        
-        // Try to get data from optional_param if available in the request.
-        $autogradingoption = optional_param('autograding_option', null, PARAM_INT);
-
-        if ($autogradingoption === null) {
-            return;
-        }
-
-        // Save the option.
-        local_autograding_save_option($cmid, $autogradingoption);
+        // The data should already be saved by local_autograding_coursemodule_edit_post_actions.
+        // This is a backup in case that hook doesn't fire.
+        self::save_from_request($cmid);
     }
 
     /**
@@ -62,27 +51,49 @@ class observer {
      * @return void
      */
     public static function course_module_updated(course_module_updated $event): void {
-        global $DB;
-
         // Only process assign modules.
         if ($event->other['modulename'] !== 'assign') {
             return;
         }
 
-        $cmid = $event->objectid;
+        $cmid = (int)$event->objectid;
         if ($cmid <= 0) {
             return;
         }
 
-        // Get the autograding option from the request.
+        // The data should already be saved by local_autograding_coursemodule_edit_post_actions.
+        // This is a backup in case that hook doesn't fire.
+        self::save_from_request($cmid);
+    }
+
+    /**
+     * Helper function to save data from request parameters.
+     *
+     * @param int $cmid Course module ID
+     * @return void
+     */
+    private static function save_from_request(int $cmid): void {
+        // Get the autograding option from the form data.
         $autogradingoption = optional_param('autograding_option', null, PARAM_INT);
 
         if ($autogradingoption === null) {
             return;
         }
 
-        // Save or update the option.
-        local_autograding_save_option($cmid, $autogradingoption);
+        // Get the text answer if provided.
+        $textanswer = null;
+        if ($autogradingoption === 2) {
+            $textanswer = optional_param('autograding_text_answer', '', PARAM_TEXT);
+            $textanswer = trim($textanswer);
+            
+            // Ensure it's not empty for option 2.
+            if (empty($textanswer)) {
+                $textanswer = null;
+            }
+        }
+
+        // Save the option with answer.
+        local_autograding_save_option($cmid, $autogradingoption, $textanswer);
     }
 
     /**

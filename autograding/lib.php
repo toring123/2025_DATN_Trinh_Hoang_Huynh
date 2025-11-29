@@ -29,12 +29,14 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
     // Get the course module ID if editing.
     $cmid = $formwrapper->get_current()->coursemodule ?? null;
     $currentvalue = 0;
+    $currentanswer = '';
 
     // Load existing value if editing.
     if ($cmid !== null && $cmid > 0) {
-        $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option');
+        $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option, answer');
         if ($record !== false) {
             $currentvalue = (int)$record->autograding_option;
+            $currentanswer = $record->answer ?? '';
         }
     }
 
@@ -65,6 +67,117 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
 
     // Set type.
     $mform->setType('autograding_option', PARAM_INT);
+
+    // Add text answer field (conditional).
+    $mform->addElement(
+        'textarea',
+        'autograding_text_answer',
+        get_string('text_answer_label', 'local_autograding'),
+        ['rows' => 5, 'cols' => 60]
+    );
+
+    // Add help button for text answer.
+    $mform->addHelpButton('autograding_text_answer', 'text_answer_label', 'local_autograding');
+
+    // Set type.
+    $mform->setType('autograding_text_answer', PARAM_TEXT);
+
+    // Set default value if editing.
+    $mform->setDefault('autograding_text_answer', $currentanswer);
+
+    // Hide this field unless option 2 is selected.
+    $mform->hideIf('autograding_text_answer', 'autograding_option', 'neq', 2);
+
+    // Disable autocomplete for better UX.
+    $mform->disabledIf('autograding_text_answer', 'autograding_option', 'neq', 2);
+}
+
+/**
+ * Validates the autograding form elements.
+ *
+ * This function is called by the course module form validation process.
+ * Moodle passes different numbers of arguments in different contexts.
+ *
+ * @param mixed ...$args Variable number of arguments from Moodle
+ * @return array Array of errors
+ */
+function local_autograding_coursemodule_validation(...$args): array {
+    $errors = [];
+    
+    // Handle different calling conventions.
+    // Sometimes Moodle passes: ($data, $files)
+    // Sometimes Moodle passes: ($formobject, $data, $files)
+    if (count($args) === 2) {
+        // Called with ($data, $files).
+        [$data, $files] = $args;
+    } else if (count($args) === 3) {
+        // Called with ($formobject, $data, $files).
+        [, $data, $files] = $args;
+    } else {
+        // Unexpected number of arguments.
+        debugging('Unexpected number of arguments in local_autograding_coursemodule_validation: ' . count($args), DEBUG_DEVELOPER);
+        return $errors;
+    }
+
+    // Ensure $data is an array.
+    if (is_object($data)) {
+        $data = (array)$data;
+    }
+
+    // Check if option 2 is selected and text answer is required.
+    if (isset($data['autograding_option']) && (int)$data['autograding_option'] === 2) {
+        $textanswer = $data['autograding_text_answer'] ?? '';
+        $textanswer = trim($textanswer);
+
+        if (empty($textanswer)) {
+            $errors['autograding_text_answer'] = get_string('text_answer_required', 'local_autograding');
+        }
+    }
+
+    return $errors;
+}
+
+/**
+ * Processes data before the course module form is saved.
+ *
+ * This function is called after the module is created/updated.
+ * It should not modify the $data object, only use it to save additional data.
+ *
+ * @param object $data Form data (do not modify this object)
+ * @param object $course Course object
+ * @return object The unmodified $data object
+ */
+function local_autograding_coursemodule_edit_post_actions(object $data, object $course): object {
+    // Only process assign modules.
+    if (!isset($data->modulename) || $data->modulename !== 'assign') {
+        return $data;
+    }
+
+    // Get course module ID and ensure it's an integer.
+    $cmid = isset($data->coursemodule) ? (int)$data->coursemodule : 0;
+    if ($cmid <= 0) {
+        debugging('Invalid cmid in local_autograding_coursemodule_edit_post_actions: ' . ($data->coursemodule ?? 'null'), DEBUG_DEVELOPER);
+        return $data;
+    }
+
+    // Get autograding option.
+    $autogradingoption = isset($data->autograding_option) ? (int)$data->autograding_option : 0;
+
+    // Get text answer if provided.
+    $textanswer = null;
+    if ($autogradingoption === 2 && isset($data->autograding_text_answer)) {
+        $textanswer = trim($data->autograding_text_answer);
+        if (empty($textanswer)) {
+            $textanswer = null;
+        }
+    }
+
+    // Save the data.
+    debugging('Saving autograding data: cmid=' . $cmid . ', option=' . $autogradingoption . ', answer=' . ($textanswer ? 'yes' : 'no'), DEBUG_DEVELOPER);
+    local_autograding_save_option($cmid, $autogradingoption, $textanswer);
+    
+    // Return the unmodified data object.
+    return $data;
 }
 
 /**
@@ -72,18 +185,25 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
  *
  * @param int $cmid Course module ID
  * @param int $autogradingoption The autograding option value
+ * @param string|null $answer The text answer (for option 2)
  * @return bool Success status
  */
-function local_autograding_save_option(int $cmid, int $autogradingoption): bool {
+function local_autograding_save_option(int $cmid, int $autogradingoption, ?string $answer = null): bool {
     global $DB;
 
     if ($cmid <= 0) {
+        debugging('Invalid cmid provided to local_autograding_save_option: ' . $cmid, DEBUG_DEVELOPER);
         return false;
     }
 
     // Validate option value.
     if ($autogradingoption < 0 || $autogradingoption > 3) {
         $autogradingoption = 0;
+    }
+
+    // Only store answer if option 2 is selected.
+    if ($autogradingoption !== 2) {
+        $answer = null;
     }
 
     try {
@@ -93,16 +213,22 @@ function local_autograding_save_option(int $cmid, int $autogradingoption): bool 
         if ($existing !== false) {
             // Update existing record.
             $existing->autograding_option = $autogradingoption;
+            $existing->answer = $answer;
             $existing->timemodified = time();
-            return $DB->update_record('local_autograding', $existing);
+            $result = $DB->update_record('local_autograding', $existing);
+            debugging('Updated autograding record for cmid ' . $cmid . ', option: ' . $autogradingoption . ', answer: ' . ($answer ? 'yes' : 'no'), DEBUG_DEVELOPER);
+            return $result;
         } else {
             // Insert new record.
             $record = new stdClass();
             $record->cmid = $cmid;
             $record->autograding_option = $autogradingoption;
+            $record->answer = $answer;
             $record->timecreated = time();
             $record->timemodified = time();
-            return $DB->insert_record('local_autograding', $record) !== false;
+            $result = $DB->insert_record('local_autograding', $record);
+            debugging('Inserted new autograding record for cmid ' . $cmid . ', option: ' . $autogradingoption . ', answer: ' . ($answer ? 'yes' : 'no'), DEBUG_DEVELOPER);
+            return $result !== false;
         }
     } catch (\dml_exception $e) {
         debugging('Error saving autograding option: ' . $e->getMessage(), DEBUG_DEVELOPER);
@@ -114,25 +240,25 @@ function local_autograding_save_option(int $cmid, int $autogradingoption): bool 
  * Gets the autograding option for a course module.
  *
  * @param int $cmid Course module ID
- * @return int The autograding option value (0 if not found)
+ * @return object|null Object with autograding_option and answer fields, or null if not found
  */
-function local_autograding_get_option(int $cmid): int {
+function local_autograding_get_option(int $cmid): ?object {
     global $DB;
 
     if ($cmid <= 0) {
-        return 0;
+        return null;
     }
 
     try {
-        $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option');
+        $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option, answer');
         if ($record !== false) {
-            return (int)$record->autograding_option;
+            return $record;
         }
     } catch (\dml_exception $e) {
         debugging('Error retrieving autograding option: ' . $e->getMessage(), DEBUG_DEVELOPER);
     }
 
-    return 0;
+    return null;
 }
 
 /**

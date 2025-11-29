@@ -15,13 +15,18 @@ $string['pluginname'] = 'Autograding';
 $string['privacy:metadata'] = 'The Autograding plugin does not store any personal data.';
 
 // Form elements.
-$string['autograding_header'] = 'Autograding';
+$string['autograding_header'] = 'Autograding Settings';
 $string['autograding_label'] = 'Autograding';
 $string['autograding_label_help'] = 'Select the autograding option for this assignment:
 * **Not use**: Autograding is disabled for this assignment
 * **Grading without answer**: Automatic grading without requiring student answers
-* **Grading with text answer**: Automatic grading based on text submissions
+* **Grading with text answer**: Automatic grading based on text submissions (requires answer text)
 * **Grading with file answer**: Automatic grading based on file submissions';
+
+// Text answer field.
+$string['text_answer_label'] = 'Text Answer';
+$string['text_answer_label_help'] = 'Enter the expected text answer for automatic grading. This field is required when "Grading with text answer" is selected. The text entered here will be used as the reference answer for comparing student submissions.';
+$string['text_answer_required'] = 'Text answer is required when "Grading with text answer" is selected.';
 
 // Options.
 $string['option_notuse'] = 'Not use';

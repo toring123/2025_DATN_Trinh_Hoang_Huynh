@@ -22,12 +22,28 @@ function xmldb_local_autograding_upgrade(int $oldversion): bool {
 
     $dbman = $DB->get_manager();
 
-    // Add future upgrade steps here.
-    // Example:
-    // if ($oldversion < 2025112701) {
-    //     // Upgrade code here.
-    //     upgrade_plugin_savepoint(true, 2025112701, 'local', 'autograding');
-    // }
+    // Add 'answer' field to store text answers for option 2.
+    if ($oldversion < 2025112701) {
+        $table = new xmldb_table('local_autograding');
+        $field = new xmldb_field(
+            'answer',
+            XMLDB_TYPE_TEXT,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'autograding_option'
+        );
+
+        // Conditionally add field if it doesn't exist.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Savepoint reached.
+        upgrade_plugin_savepoint(true, 2025112701, 'local', 'autograding');
+    }
 
     return true;
 }

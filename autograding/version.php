@@ -12,7 +12,7 @@ declare(strict_types=1);
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_autograding';
-$plugin->version = 2025112700;
+$plugin->version = 2025112701; // Bumped version for upgrade.
 $plugin->requires = 2024100700; // Moodle 5.0.
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v1.0.0';
+$plugin->release = 'v1.1.0';
