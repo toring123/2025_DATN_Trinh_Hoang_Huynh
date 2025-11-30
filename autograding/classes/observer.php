@@ -90,6 +90,10 @@ class observer {
             if (empty($textanswer)) {
                 $textanswer = null;
             }
+        } else if ($autogradingoption === 3) {
+            // Option 3 is handled by local_autograding_coursemodule_edit_post_actions
+            // Don't save here to avoid overwriting the PDF-extracted answer with null
+            return;
         }
 
         // Save the option with answer.

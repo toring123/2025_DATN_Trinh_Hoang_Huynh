@@ -21,12 +21,18 @@ $string['autograding_label_help'] = 'Select the autograding option for this assi
 * **Not use**: Autograding is disabled for this assignment
 * **Grading without answer**: Automatic grading without requiring student answers
 * **Grading with text answer**: Automatic grading based on text submissions (requires answer text)
-* **Grading with file answer**: Automatic grading based on file submissions';
+* **Grading with file answer**: Automatic grading based on PDF file submissions (requires PDF upload)';
 
 // Text answer field.
 $string['text_answer_label'] = 'Text Answer';
 $string['text_answer_label_help'] = 'Enter the expected text answer for automatic grading. This field is required when "Grading with text answer" is selected. The text entered here will be used as the reference answer for comparing student submissions.';
 $string['text_answer_required'] = 'Text answer is required when "Grading with text answer" is selected.';
+
+// File answer field.
+$string['file_answer_label'] = 'PDF Answer File';
+$string['file_answer_label_help'] = 'Upload a PDF file containing the reference answer for automatic grading. This field is required when "Grading with file answer" is selected. The text will be automatically extracted from the PDF and stored for comparison with student submissions. Only PDF files are accepted (max 10MB).';
+$string['file_answer_required'] = 'PDF file is required when "Grading with file answer" is selected.';
+$string['file_answer_pdf_only'] = 'Only PDF files are accepted for the answer file.';
 
 // Options.
 $string['option_notuse'] = 'Not use';
