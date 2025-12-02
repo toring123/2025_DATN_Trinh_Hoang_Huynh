@@ -39,3 +39,26 @@ $string['option_notuse'] = 'Not use';
 $string['option_without_answer'] = 'Grading without answer';
 $string['option_with_text'] = 'Grading with text answer';
 $string['option_with_file'] = 'Grading with file answer';
+
+// Gemini API Settings.
+$string['gemini_settings_header'] = 'Google Gemini AI Settings';
+$string['gemini_settings_desc'] = 'Configure the Google Gemini API for automatic grading. You need a valid API key from Google AI Studio (https://aistudio.google.com/).';
+$string['gemini_api_key'] = 'Gemini API Key';
+$string['gemini_api_key_desc'] = 'Enter your Google Gemini API key. This key is used to authenticate requests to the Gemini AI service for automatic grading.';
+$string['gemini_model'] = 'Gemini Model';
+$string['gemini_model_desc'] = 'Select the Gemini model to use for grading. Gemini 2.0 Flash is recommended for balance of speed and quality.';
+
+// Auto-grading messages.
+$string['autograding_disabled'] = 'Auto-grading is not enabled for this assignment.';
+$string['autograding_no_api_key'] = 'Gemini API key is not configured. Please contact the administrator.';
+$string['autograding_api_error'] = 'Error communicating with Gemini API: {$a}';
+$string['autograding_invalid_response'] = 'Invalid response from Gemini API. Could not parse grading result.';
+$string['autograding_success'] = 'Assignment automatically graded by AI.';
+$string['autograding_no_submission'] = 'No submission content found to grade.';
+$string['autograding_no_reference'] = 'No reference answer configured for this assignment.';
+$string['autograding_feedback_prefix'] = '[AI Auto-Grading]';
+
+// Adhoc task strings.
+$string['task_grade_submission'] = 'Process auto-grading for assignment submission';
+$string['ratelimited'] = 'API rate limit exceeded';
+$string['locktimeout'] = 'Could not acquire lock for API call';

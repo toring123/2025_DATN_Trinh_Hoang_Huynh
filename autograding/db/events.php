@@ -27,4 +27,9 @@ $observers = [
         'callback' => '\local_autograding\observer::course_module_deleted',
         'priority' => 0,
     ],
+    [
+        'eventname' => '\mod_assign\event\assessable_submitted',
+        'callback' => '\local_autograding\observer::assessable_submitted',
+        'priority' => 0,
+    ],
 ];
