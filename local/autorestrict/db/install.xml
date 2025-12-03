@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/autorestrict/db" VERSION="20251202" COMMENT="XMLDB file for local_autorestrict">
+  <TABLES>
+    <TABLE NAME="local_autorestrict_course" COMMENT="Auto restrict settings per course">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" COMMENT="Course ID"/>
+        <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Is auto restrict enabled for this course"/>
+        <FIELD NAME="hide_completely" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" COMMENT="Hide completely when restricted"/>
+        <FIELD NAME="require_previous_section" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" COMMENT="Require previous section completion"/>
+        <FIELD NAME="min_section_completions" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Minimum activities to complete in previous section"/>
+        <FIELD NAME="require_previous_grade" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Require grade in previous section"/>
+        <FIELD NAME="min_section_grade" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="50" COMMENT="Minimum average grade in previous section"/>
+        <FIELD NAME="require_difficulty_progression" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" COMMENT="Require difficulty progression"/>
+        <FIELD NAME="min_diff1_for_diff2" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="2"/>
+        <FIELD NAME="min_diff1_for_diff3" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="3"/>
+        <FIELD NAME="min_diff2_for_diff3" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="2"/>
+        <FIELD NAME="min_diff1_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="4"/>
+        <FIELD NAME="min_diff2_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="3"/>
+        <FIELD NAME="min_diff3_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="2"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="courseid" TYPE="unique" FIELDS="courseid"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="courseid_idx" UNIQUE="false" FIELDS="courseid"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

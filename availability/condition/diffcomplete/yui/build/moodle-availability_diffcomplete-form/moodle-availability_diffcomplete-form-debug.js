@@ -5,41 +5,30 @@ M.availability_diffcomplete = M.availability_diffcomplete || {};
 M.availability_diffcomplete.form = Y.Object(M.core_availability.plugin);
 
 M.availability_diffcomplete.form.counts = null;
+M.availability_diffcomplete.form.numLevels = 4;
+M.availability_diffcomplete.form.prefix = 'diff';
 
-M.availability_diffcomplete.form.initInner = function(counts) {
-    this.counts = counts || {diff1: 0, diff2: 0, diff3: 0, diff4: 0};
+M.availability_diffcomplete.form.initInner = function(counts, numLevels, prefix) {
+    this.counts = counts || {};
+    this.numLevels = numLevels || 4;
+    this.prefix = prefix || 'diff';
 };
 
 M.availability_diffcomplete.form.getNode = function(json) {
     var html = '<div class="availability_diffcomplete-fields">';
     
-    // Diff1
-    html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
-            M.util.get_string('diff1', 'availability_diffcomplete') + 
-            ' (' + this.counts.diff1 + ' available)</span> ' +
-            '<input type="number" class="form-control" name="diff1" min="0" ' +
-            'value="' + (json.diff1 || 0) + '" style="width: 80px;"/></label>';
-    
-    // Diff2
-    html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
-            M.util.get_string('diff2', 'availability_diffcomplete') + 
-            ' (' + this.counts.diff2 + ' available)</span> ' +
-            '<input type="number" class="form-control" name="diff2" min="0" ' +
-            'value="' + (json.diff2 || 0) + '" style="width: 80px;"/></label>';
-    
-    // Diff3
-    html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
-            M.util.get_string('diff3', 'availability_diffcomplete') + 
-            ' (' + this.counts.diff3 + ' available)</span> ' +
-            '<input type="number" class="form-control" name="diff3" min="0" ' +
-            'value="' + (json.diff3 || 0) + '" style="width: 80px;"/></label>';
-    
-    // Diff4
-    html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
-            M.util.get_string('diff4', 'availability_diffcomplete') + 
-            ' (' + this.counts.diff4 + ' available)</span> ' +
-            '<input type="number" class="form-control" name="diff4" min="0" ' +
-            'value="' + (json.diff4 || 0) + '" style="width: 80px;"/></label>';
+    // Generate fields dynamically based on numLevels
+    for (var i = 1; i <= this.numLevels; i++) {
+        var tagname = this.prefix + i;
+        var count = this.counts[tagname] || 0;
+        var value = json[tagname] || 0;
+        
+        html += '<label class="form-inline d-block mb-1">';
+        html += '<span class="pr-3">Difficulty ' + i + ' (' + count + ' available)</span> ';
+        html += '<input type="number" class="form-control" name="' + tagname + '" min="0" ';
+        html += 'value="' + value + '" style="width: 80px;"/>';
+        html += '</label>';
+    }
     
     html += '</div>';
     
@@ -59,10 +48,13 @@ M.availability_diffcomplete.form.getNode = function(json) {
 };
 
 M.availability_diffcomplete.form.fillValue = function(value, node) {
-    value.diff1 = parseInt(node.one('input[name=diff1]').get('value'), 10) || 0;
-    value.diff2 = parseInt(node.one('input[name=diff2]').get('value'), 10) || 0;
-    value.diff3 = parseInt(node.one('input[name=diff3]').get('value'), 10) || 0;
-    value.diff4 = parseInt(node.one('input[name=diff4]').get('value'), 10) || 0;
+    for (var i = 1; i <= this.numLevels; i++) {
+        var tagname = this.prefix + i;
+        var input = node.one('input[name=' + tagname + ']');
+        if (input) {
+            value[tagname] = parseInt(input.get('value'), 10) || 0;
+        }
+    }
 };
 
 M.availability_diffcomplete.form.fillErrors = function(errors, node) {

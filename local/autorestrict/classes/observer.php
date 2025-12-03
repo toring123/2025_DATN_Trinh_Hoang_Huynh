@@ -36,9 +36,9 @@ class observer {
             return;
         }
         
-        // Check if auto-restrict is enabled
-        $config = get_config('local_autorestrict');
-        if (empty($config->enabled)) {
+        // Check if auto-restrict is enabled FOR THIS COURSE
+        $config = self::get_course_config($courseid);
+        if (!$config || empty($config->enabled)) {
             return;
         }
         
@@ -55,6 +55,17 @@ class observer {
             // Clear cache
             \course_modinfo::purge_course_cache($courseid);
         }
+    }
+    
+    /**
+     * Get course-specific configuration
+     *
+     * @param int $courseid Course ID
+     * @return object|null Config object or null
+     */
+    protected static function get_course_config($courseid) {
+        global $DB;
+        return $DB->get_record('local_autorestrict_course', ['courseid' => $courseid]);
     }
     
     /**
@@ -164,23 +175,21 @@ class observer {
             'diff4' => 0
         ];
         
-        $minRequired = !empty($config->min_difficulty_completions) ? (int)$config->min_difficulty_completions : 1;
-        
         switch ($difftag) {
             case 'diff2':
                 // Need to complete diff1 first
-                $requirements['diff1'] = $minRequired;
+                $requirements['diff1'] = !empty($config->min_diff1_for_diff2) ? (int)$config->min_diff1_for_diff2 : 2;
                 break;
             case 'diff3':
                 // Need to complete diff1 and diff2 first
-                $requirements['diff1'] = $minRequired;
-                $requirements['diff2'] = $minRequired;
+                $requirements['diff1'] = !empty($config->min_diff1_for_diff3) ? (int)$config->min_diff1_for_diff3 : 3;
+                $requirements['diff2'] = !empty($config->min_diff2_for_diff3) ? (int)$config->min_diff2_for_diff3 : 2;
                 break;
             case 'diff4':
                 // Need to complete diff1, diff2, and diff3 first
-                $requirements['diff1'] = $minRequired;
-                $requirements['diff2'] = $minRequired;
-                $requirements['diff3'] = $minRequired;
+                $requirements['diff1'] = !empty($config->min_diff1_for_diff4) ? (int)$config->min_diff1_for_diff4 : 4;
+                $requirements['diff2'] = !empty($config->min_diff2_for_diff4) ? (int)$config->min_diff2_for_diff4 : 3;
+                $requirements['diff3'] = !empty($config->min_diff3_for_diff4) ? (int)$config->min_diff3_for_diff4 : 2;
                 break;
             default:
                 // diff1 - no requirements
