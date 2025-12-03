@@ -10,13 +10,13 @@
 $string['pluginname'] = 'Auto Restrict Access';
 $string['autorestrict:manage'] = 'Manage auto restrict settings';
 
-$string['course_settings_desc'] = 'Configure automatic restriction settings for this course. When enabled, new activities will automatically have restriction conditions added based on the settings below.';
+$string['course_settings_desc'] = 'Configure automatic restriction settings for this course. When you save, restrictions will be automatically applied to all activities based on the settings below.';
 $string['settings_saved'] = 'Settings saved successfully.';
 
 $string['section_settings'] = 'Section Progression Settings';
 
 $string['enabled'] = 'Enable auto restrict';
-$string['enabled_help'] = 'Automatically add restrict access conditions when new activities are created in this course.';
+$string['enabled_help'] = 'When enabled, restrictions will be automatically applied to all activities. When disabled, all restrictions will be removed.';
 
 $string['hide_completely'] = 'Hide completely when restricted';
 $string['hide_completely_help'] = 'When enabled, activities will be completely hidden from students who do not meet the requirements. When disabled, activities will be shown greyed out with a message explaining the requirements.';
@@ -48,3 +48,7 @@ $string['min_diff3_for_diff4'] = 'Diff3 completions to unlock Diff4';
 
 $string['error_negative'] = 'Value cannot be negative.';
 $string['error_grade_range'] = 'Grade must be between 0 and 100.';
+
+// Auto apply/clear messages.
+$string['auto_applied'] = 'Restrictions automatically applied: {$a->applied} activities updated, {$a->skipped} skipped.';
+$string['auto_cleared'] = 'Restrictions automatically cleared: {$a->modules} activities, {$a->sections} sections.';

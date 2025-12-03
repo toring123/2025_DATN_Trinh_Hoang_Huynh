@@ -11,8 +11,8 @@ defined('MOODLE_INTERNAL') || die();
 
 $observers = [
     [
-        'eventname' => '\core\event\course_module_created',
-        'callback' => '\local_autorestrict\observer::course_module_created',
+        'eventname' => '\core\event\course_module_updated',
+        'callback' => '\local_autorestrict\observer::course_module_updated',
         'priority' => 200,
     ],
 ];

@@ -19,10 +19,26 @@ class observer {
      * @param \core\event\course_module_created $event
      */
     public static function course_module_created(\core\event\course_module_created $event) {
+        self::apply_restriction_to_module($event->objectid, $event->courseid);
+    }
+    
+    /**
+     * Handle course module updated event
+     *
+     * @param \core\event\course_module_updated $event
+     */
+    public static function course_module_updated(\core\event\course_module_updated $event) {
+        self::apply_restriction_to_module($event->objectid, $event->courseid);
+    }
+    
+    /**
+     * Apply restriction to a single module
+     *
+     * @param int $cmid Course module ID
+     * @param int $courseid Course ID
+     */
+    protected static function apply_restriction_to_module($cmid, $courseid) {
         global $DB;
-        
-        $cmid = $event->objectid;
-        $courseid = $event->courseid;
         
         // Get the course module
         $cm = $DB->get_record('course_modules', ['id' => $cmid]);
@@ -48,13 +64,16 @@ class observer {
         // Build availability conditions based on section and tag
         $availability = self::build_availability_conditions($section->section, $tag, $config);
         
+        // Update the course module with availability (or clear if no conditions)
         if ($availability) {
-            // Update the course module with availability
             $DB->set_field('course_modules', 'availability', json_encode($availability), ['id' => $cmid]);
-            
-            // Clear cache
-            \course_modinfo::purge_course_cache($courseid);
+        } else {
+            // No conditions - clear any existing restrictions
+            $DB->set_field('course_modules', 'availability', null, ['id' => $cmid]);
         }
+        
+        // Clear cache
+        \course_modinfo::purge_course_cache($courseid);
     }
     
     /**
@@ -63,9 +82,195 @@ class observer {
      * @param int $courseid Course ID
      * @return object|null Config object or null
      */
-    protected static function get_course_config($courseid) {
+    public static function get_course_config($courseid) {
         global $DB;
         return $DB->get_record('local_autorestrict_course', ['courseid' => $courseid]);
+    }
+    
+    /**
+     * Apply restrictions to all existing modules in a course
+     *
+     * @param int $courseid Course ID
+     * @param object $config Course config
+     * @param bool $overwrite Whether to overwrite existing restrictions
+     * @return array Results [applied, skipped, errors]
+     */
+    public static function apply_to_all_modules($courseid, $config, $overwrite = false) {
+        global $DB;
+        
+        $results = ['applied' => 0, 'skipped' => 0, 'errors' => 0];
+        
+        // Get all modules in course with their sections
+        $sql = "SELECT cm.id, cm.availability, cs.section
+                FROM {course_modules} cm
+                JOIN {course_sections} cs ON cs.id = cm.section
+                WHERE cm.course = :courseid
+                ORDER BY cs.section, cm.id";
+        
+        $modules = $DB->get_records_sql($sql, ['courseid' => $courseid]);
+        
+        foreach ($modules as $cm) {
+            // Skip if already has restrictions and not overwriting
+            if (!$overwrite && !empty($cm->availability)) {
+                $results['skipped']++;
+                continue;
+            }
+            
+            // Get difficulty tag for this module
+            $tag = self::get_module_difficulty_tag($cm->id);
+            
+            // Build availability conditions
+            $availability = self::build_availability_conditions($cm->section, $tag, $config);
+            
+            if ($availability) {
+                try {
+                    $DB->set_field('course_modules', 'availability', json_encode($availability), ['id' => $cm->id]);
+                    $results['applied']++;
+                } catch (\Exception $e) {
+                    $results['errors']++;
+                }
+            } else {
+                $results['skipped']++;
+            }
+        }
+        
+        // Clear cache
+        \course_modinfo::purge_course_cache($courseid);
+        
+        return $results;
+    }
+    
+    /**
+     * Apply restrictions to all sections in a course
+     *
+     * @param int $courseid Course ID
+     * @param object $config Course config
+     * @param bool $overwrite Whether to overwrite existing restrictions
+     * @return array Results [applied, skipped, errors]
+     */
+    public static function apply_to_all_sections($courseid, $config, $overwrite = false) {
+        global $DB;
+        
+        $results = ['applied' => 0, 'skipped' => 0, 'errors' => 0];
+        
+        $sections = $DB->get_records('course_sections', ['course' => $courseid], 'section ASC');
+        
+        foreach ($sections as $section) {
+            // Skip if already has restrictions and not overwriting
+            if (!$overwrite && !empty($section->availability)) {
+                $results['skipped']++;
+                continue;
+            }
+            
+            // Build section availability (no difficulty tag for sections)
+            $availability = self::build_section_availability($section->section, $config);
+            
+            if ($availability) {
+                try {
+                    $DB->set_field('course_sections', 'availability', json_encode($availability), ['id' => $section->id]);
+                    $results['applied']++;
+                } catch (\Exception $e) {
+                    $results['errors']++;
+                }
+            } else {
+                $results['skipped']++;
+            }
+        }
+        
+        // Clear cache
+        \course_modinfo::purge_course_cache($courseid);
+        
+        return $results;
+    }
+    
+    /**
+     * Clear all restrictions from modules in a course
+     *
+     * @param int $courseid Course ID
+     * @return int Number of modules cleared
+     */
+    public static function clear_all_module_restrictions($courseid) {
+        global $DB;
+        
+        $count = $DB->count_records_select('course_modules', 
+            'course = :courseid AND availability IS NOT NULL AND availability != :empty',
+            ['courseid' => $courseid, 'empty' => '']);
+        
+        $DB->set_field('course_modules', 'availability', null, ['course' => $courseid]);
+        \course_modinfo::purge_course_cache($courseid);
+        
+        return $count;
+    }
+    
+    /**
+     * Clear all restrictions from sections in a course
+     *
+     * @param int $courseid Course ID
+     * @return int Number of sections cleared
+     */
+    public static function clear_all_section_restrictions($courseid) {
+        global $DB;
+        
+        $count = $DB->count_records_select('course_sections', 
+            'course = :courseid AND availability IS NOT NULL AND availability != :empty',
+            ['courseid' => $courseid, 'empty' => '']);
+        
+        $DB->set_field('course_sections', 'availability', null, ['course' => $courseid]);
+        \course_modinfo::purge_course_cache($courseid);
+        
+        return $count;
+    }
+    
+    /**
+     * Build section availability conditions (without difficulty)
+     *
+     * @param int $sectionnumber Section number
+     * @param object $config Plugin config
+     * @return array|null Availability structure or null
+     */
+    protected static function build_section_availability($sectionnumber, $config) {
+        $conditions = [];
+        
+        // Skip section 0 and 1
+        if ($sectionnumber <= 1) {
+            return null;
+        }
+        
+        // Condition based on previous section completion
+        if (!empty($config->require_previous_section)) {
+            $previousSection = $sectionnumber - 1;
+            $minCompletions = !empty($config->min_section_completions) ? (int)$config->min_section_completions : 1;
+            
+            $conditions[] = [
+                'type' => 'sectioncomplete',
+                'section' => $previousSection,
+                'mincompletions' => $minCompletions
+            ];
+        }
+        
+        // Condition based on previous section grade
+        if (!empty($config->require_previous_grade)) {
+            $previousSection = $sectionnumber - 1;
+            $minGrade = !empty($config->min_section_grade) ? (float)$config->min_section_grade : 50;
+            
+            $conditions[] = [
+                'type' => 'sectiongrade',
+                'section' => $previousSection,
+                'mingrade' => $minGrade
+            ];
+        }
+        
+        if (empty($conditions)) {
+            return null;
+        }
+        
+        $showWhenNotMet = empty($config->hide_completely);
+        
+        return [
+            'op' => '&',
+            'c' => $conditions,
+            'showc' => array_fill(0, count($conditions), $showWhenNotMet)
+        ];
     }
     
     /**
@@ -100,41 +305,35 @@ class observer {
     protected static function build_availability_conditions($sectionnumber, $difftag, $config) {
         $conditions = [];
         
-        // Skip section 0 (general section) - usually doesn't need restrictions
-        if ($sectionnumber == 0) {
-            return null;
-        }
-        
-        // For section 1, no previous section requirements
-        if ($sectionnumber == 1) {
-            return null;
-        }
-        
-        // Condition based on previous section completion
-        if (!empty($config->require_previous_section)) {
-            $previousSection = $sectionnumber - 1;
-            $minCompletions = !empty($config->min_section_completions) ? (int)$config->min_section_completions : 1;
+        // Only apply section-based conditions for section 2 and above
+        // Section 0 is general section, section 1 has no previous content section
+        if ($sectionnumber >= 2) {
+            // Condition based on previous section completion
+            if (!empty($config->require_previous_section)) {
+                $previousSection = $sectionnumber - 1;
+                $minCompletions = !empty($config->min_section_completions) ? (int)$config->min_section_completions : 1;
+                
+                $conditions[] = [
+                    'type' => 'sectioncomplete',
+                    'section' => $previousSection,
+                    'mincompletions' => $minCompletions
+                ];
+            }
             
-            $conditions[] = [
-                'type' => 'sectioncomplete',
-                'section' => $previousSection,
-                'mincompletions' => $minCompletions
-            ];
+            // Condition based on previous section grade
+            if (!empty($config->require_previous_grade)) {
+                $previousSection = $sectionnumber - 1;
+                $minGrade = !empty($config->min_section_grade) ? (float)$config->min_section_grade : 50;
+                
+                $conditions[] = [
+                    'type' => 'sectiongrade',
+                    'section' => $previousSection,
+                    'mingrade' => $minGrade
+                ];
+            }
         }
         
-        // Condition based on previous section grade
-        if (!empty($config->require_previous_grade)) {
-            $previousSection = $sectionnumber - 1;
-            $minGrade = !empty($config->min_section_grade) ? (float)$config->min_section_grade : 50;
-            
-            $conditions[] = [
-                'type' => 'sectiongrade',
-                'section' => $previousSection,
-                'mingrade' => $minGrade
-            ];
-        }
-        
-        // Condition based on difficulty progression
+        // Condition based on difficulty progression (applies to ALL sections including 0 and 1)
         if (!empty($config->require_difficulty_progression) && $difftag) {
             $diffRequirements = self::get_difficulty_requirements($difftag, $config);
             if ($diffRequirements) {

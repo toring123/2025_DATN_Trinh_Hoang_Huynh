@@ -47,6 +47,8 @@ if ($form->is_cancelled()) {
 } else if ($data = $form->get_data()) {
     $now = time();
     
+    $isEnabled = !empty($data->enabled);
+    
     if ($settings) {
         // Update existing settings.
         $data->id = $settings->id;
@@ -59,8 +61,24 @@ if ($form->is_cancelled()) {
         $DB->insert_record('local_autorestrict_course', $data);
     }
     
-    // Show success message.
-    \core\notification::success(get_string('settings_saved', 'local_autorestrict'));
+    // Auto apply or clear restrictions.
+    if ($isEnabled) {
+        // Enabled - re-apply restrictions to all modules (overwrite to apply new settings).
+        $config = \local_autorestrict\observer::get_course_config($courseid);
+        $results = \local_autorestrict\observer::apply_to_all_modules($courseid, $config, true);
+        \core\notification::success(get_string('settings_saved', 'local_autorestrict'));
+        \core\notification::info(get_string('auto_applied', 'local_autorestrict', $results));
+    } else {
+        // Disabled - clear all restrictions.
+        $clearedModules = \local_autorestrict\observer::clear_all_module_restrictions($courseid);
+        $clearedSections = \local_autorestrict\observer::clear_all_section_restrictions($courseid);
+        \core\notification::success(get_string('settings_saved', 'local_autorestrict'));
+        if ($clearedModules > 0 || $clearedSections > 0) {
+            \core\notification::info(get_string('auto_cleared', 'local_autorestrict', 
+                (object)['modules' => $clearedModules, 'sections' => $clearedSections]));
+        }
+    }
+    
     redirect(new moodle_url('/local/autorestrict/course_settings.php', ['courseid' => $courseid]));
 }
 
@@ -68,5 +86,6 @@ if ($form->is_cancelled()) {
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('pluginname', 'local_autorestrict'));
 echo html_writer::tag('p', get_string('course_settings_desc', 'local_autorestrict'));
+
 $form->display();
 echo $OUTPUT->footer();
