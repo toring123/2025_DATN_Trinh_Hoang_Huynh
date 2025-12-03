@@ -87,9 +87,22 @@ class grade_submission_task extends \core\task\adhoc_task {
             }
 
             // Step 4: Get the question (assignment description).
-            $question = strip_tags($assign->intro ?? '');
-            $question = trim($question);
+            $intro = strip_tags($assign->intro ?? '');
+            $activity = strip_tags($assign->activity ?? '');
 
+            $parts = [];
+            if (trim($intro) !== '') {
+                $parts[] = trim($intro);
+            }
+            if (trim($activity) !== '') {
+                $parts[] = trim($activity);
+            }
+
+            $question = implode("\n\n", $parts);
+            if (empty($question)) {
+                mtrace("[AUTOGRADING TASK] Assignment question is empty for cmid: {$cmid}");
+                return; // Don't retry - configuration error.
+            }
             // Step 5: Get reference answer.
             $referenceAnswer = $autogradingconfig->answer ?? '';
             $autogradingoption = (int)$autogradingconfig->autograding_option;
@@ -100,34 +113,45 @@ class grade_submission_task extends \core\task\adhoc_task {
                 return; // Don't retry - configuration error.
             }
 
-            // Step 6: Get student submission text.
-            $studentResponse = $this->get_student_submission_text((int)$cm->instance, $userid, $submissionid);
-            if (empty($studentResponse)) {
-                mtrace("[AUTOGRADING TASK] No student submission text found for user {$userid}");
+            // Step 6: Get student submission data (text and images).
+            $submissionData = $this->get_submission_data((int)$cm->instance, $userid, $submissionid);
+            $studentResponse = $submissionData['text'];
+            $imageParts = $submissionData['images'];
+
+            // Check if we have any content to grade.
+            $hasText = !empty($studentResponse);
+            $hasImages = !empty($imageParts);
+
+            if (!$hasText && !$hasImages) {
+                mtrace("[AUTOGRADING TASK] No student submission content found for user {$userid}");
                 return; // Don't retry - no submission to grade.
             }
 
-            mtrace("[AUTOGRADING TASK] Student response length: " . strlen($studentResponse));
+            mtrace("[AUTOGRADING TASK] Student response: text=" . ($hasText ? strlen($studentResponse) . " chars" : "none") .
+                   ", images=" . count($imageParts));
 
-            // Step 7: Get API key.
-            $apiKey = get_config('local_autograding', 'gemini_api_key');
-            if (empty($apiKey)) {
-                mtrace("[AUTOGRADING TASK] Gemini API key not configured");
-                return; // Don't retry - configuration error.
-            }
+            // Step 7: Get AI provider configuration.
+            $provider = get_config('local_autograding', 'ai_provider') ?: 'gemini';
+            mtrace("[AUTOGRADING TASK] Using AI provider: {$provider}");
 
-            // Step 8: Call Gemini API.
+            // Step 8: Call AI API based on provider.
             // Note: Rate limiting (HTTP 429) is handled by throwing moodle_exception
             // which triggers Moodle's built-in task retry mechanism.
-            mtrace("[AUTOGRADING TASK] Calling Gemini API...");
-            $gradingResult = $this->call_gemini_api($apiKey, $question, $referenceAnswer, $studentResponse, $autogradingoption);
+            $gradingResult = $this->call_ai_api(
+                $provider,
+                $question,
+                $referenceAnswer,
+                $studentResponse ?? '',
+                $autogradingoption,
+                $imageParts
+            );
 
             if ($gradingResult === null) {
-                mtrace("[AUTOGRADING TASK] Gemini API returned null result");
+                mtrace("[AUTOGRADING TASK] AI API returned null result");
                 return; // Don't retry - API returned invalid response.
             }
 
-            mtrace("[AUTOGRADING TASK] Gemini API returned grade: {$gradingResult['grade']}");
+            mtrace("[AUTOGRADING TASK] AI API returned grade: {$gradingResult['grade']}");
 
             // Step 9: Save the grade.
             mtrace("[AUTOGRADING TASK] Saving grade to assignment...");
@@ -244,12 +268,138 @@ class grade_submission_task extends \core\task\adhoc_task {
                         $extractedText[] = trim($text);
                     }
                 }
+                // Note: Image files are handled separately by extract_images_from_submission_files()
             } catch (\Exception $e) {
                 mtrace("[AUTOGRADING TASK] Error extracting text from file {$filename}: " . $e->getMessage());
             }
         }
 
         return implode("\n\n", $extractedText);
+    }
+
+    /**
+     * Supported image MIME types for Gemini Vision API.
+     */
+    private const SUPPORTED_IMAGE_MIMETYPES = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/heic',
+    ];
+
+    /**
+     * Extract images from submission files for vision-based grading.
+     *
+     * This method retrieves all image files from the submission, converts them
+     * to Base64, and returns them in a format suitable for the Gemini Vision API.
+     *
+     * @param object $submission The submission record
+     * @param int $assignid Assignment ID
+     * @return array Array of image parts with 'mimeType' and 'data' (Base64)
+     */
+    private function extract_images_from_submission_files(object $submission, int $assignid): array {
+        $fs = get_file_storage();
+        $cm = get_coursemodule_from_instance('assign', $assignid, 0, false, MUST_EXIST);
+        $context = \context_module::instance($cm->id);
+
+        $files = $fs->get_area_files(
+            $context->id,
+            'assignsubmission_file',
+            'submission_files',
+            $submission->id,
+            'id',
+            false // Exclude directories
+        );
+
+        $imageParts = [];
+
+        foreach ($files as $file) {
+            // Skip directories and empty files.
+            if ($file->is_directory() || $file->get_filesize() === 0) {
+                continue;
+            }
+
+            $mimeType = $file->get_mimetype();
+            $filename = $file->get_filename();
+
+            // Check if the file is a supported image type.
+            if (!in_array($mimeType, self::SUPPORTED_IMAGE_MIMETYPES, true)) {
+                continue;
+            }
+
+            try {
+                // Read file content and convert to Base64.
+                $content = $file->get_content();
+                if (empty($content)) {
+                    mtrace("[AUTOGRADING TASK] Image file {$filename} is empty, skipping");
+                    continue;
+                }
+
+                $base64Data = base64_encode($content);
+
+                $imageParts[] = [
+                    'mimeType' => $mimeType,
+                    'data' => $base64Data,
+                    'filename' => $filename, // For logging purposes
+                ];
+
+                mtrace("[AUTOGRADING TASK] Extracted image: {$filename} ({$mimeType}, " . strlen($content) . " bytes)");
+
+            } catch (\Exception $e) {
+                mtrace("[AUTOGRADING TASK] Error extracting image {$filename}: " . $e->getMessage());
+            }
+        }
+
+        mtrace("[AUTOGRADING TASK] Total images extracted: " . count($imageParts));
+
+        return $imageParts;
+    }
+
+    /**
+     * Get submission data including both text and images.
+     *
+     * @param int $assignid Assignment ID
+     * @param int $userid User ID
+     * @param int|null $submissionid Submission ID
+     * @return array{text: string|null, images: array} Array with 'text' and 'images' keys
+     */
+    private function get_submission_data(int $assignid, int $userid, ?int $submissionid): array {
+        global $DB;
+
+        $result = [
+            'text' => null,
+            'images' => [],
+        ];
+
+        // Get the submission record.
+        if ($submissionid === null) {
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $assignid,
+                'userid' => $userid,
+                'latest' => 1,
+            ]);
+        } else {
+            $submission = $DB->get_record('assign_submission', ['id' => $submissionid]);
+        }
+
+        if (!$submission) {
+            return $result;
+        }
+
+        // Get text submission.
+        $result['text'] = $this->get_student_submission_text($assignid, $userid, $submissionid);
+
+        // Get image submissions.
+        $filesubmission = $DB->get_record('assignsubmission_file', [
+            'assignment' => $assignid,
+            'submission' => $submission->id,
+        ]);
+
+        if ($filesubmission && $filesubmission->numfiles > 0) {
+            $result['images'] = $this->extract_images_from_submission_files($submission, $assignid);
+        }
+
+        return $result;
     }
 
     /**
@@ -384,49 +534,123 @@ class grade_submission_task extends \core\task\adhoc_task {
     }
 
     /**
-     * Call the Google Gemini API for grading.
+     * Call the AI API for grading based on the selected provider.
      *
-     * @param string $apiKey The API key
+     * @param string $provider The AI provider ('gemini' or 'qwen')
      * @param string $question The assignment question
      * @param string $referenceAnswer The reference answer
-     * @param string $studentResponse The student's response
+     * @param string $studentResponse The student's text response
      * @param int $autogradingoption The autograding option (1, 2, or 3)
+     * @param array $imageParts Array of image parts for vision-based grading
      * @return array|null Array with 'grade' and 'explanation', or null on error
      * @throws \moodle_exception When rate limited (HTTP 429) to trigger retry.
      */
-    private function call_gemini_api(
-        string $apiKey,
+    private function call_ai_api(
+        string $provider,
         string $question,
         string $referenceAnswer,
         string $studentResponse,
-        int $autogradingoption
+        int $autogradingoption,
+        array $imageParts = []
     ): ?array {
-        // Build the prompt based on the autograding option.
-        if ($autogradingoption === 1) {
-            // Grading without reference answer.
-            $prompt = $this->build_prompt_without_reference($question, $studentResponse);
+        // Determine if this is an image-based submission.
+        $hasImages = !empty($imageParts);
+
+        // Build the user content based on the autograding option and submission type.
+        if ($hasImages) {
+            // Image-based grading (handwriting).
+            if ($autogradingoption === 1) {
+                $userContent = $this->build_image_content_without_reference($question);
+            } else {
+                $userContent = $this->build_image_content_with_reference($question, $referenceAnswer);
+            }
         } else {
-            // Grading with reference answer (options 2 and 3).
-            $prompt = $this->build_prompt_with_reference($question, $referenceAnswer, $studentResponse);
+            // Text-based grading.
+            if ($autogradingoption === 1) {
+                $userContent = $this->build_user_content_without_reference($question, $studentResponse);
+            } else {
+                $userContent = $this->build_user_content_with_reference($question, $referenceAnswer, $studentResponse);
+                // mtrace("[AUTOGRADING TASK] User content:", $userContent);
+            }
+        }
+
+        // Get the system instruction from config.
+        $systemInstruction = get_config('local_autograding', 'system_instruction');
+        if (empty($systemInstruction)) {
+            $systemInstruction = get_string('system_instruction_default', 'local_autograding');
+        }
+        $systemInstruction .= "\n" . get_string('system_instruction_footer', 'local_autograding');
+
+        // Route to the appropriate provider.
+        if ($provider === 'qwen') {
+            return $this->call_qwen_api($systemInstruction, $userContent, $imageParts);
+        } else {
+            return $this->call_gemini_api($systemInstruction, $userContent, $imageParts);
+        }
+    }
+
+    /**
+     * Call the Google Gemini API for grading.
+     *
+     * Supports both text-only and vision (image + text) grading using Gemini's
+     * multimodal capabilities.
+     *
+     * @param string $systemInstruction The system instruction for the AI
+     * @param string $userContent The user content (grading request text)
+     * @param array $imageParts Array of image parts for vision-based grading
+     * @return array|null Array with 'grade' and 'explanation', or null on error
+     * @throws \moodle_exception When rate limited (HTTP 429) to trigger retry.
+     */
+    private function call_gemini_api(string $systemInstruction, string $userContent, array $imageParts = []): ?array {
+        // Get API key.
+        $apiKey = get_config('local_autograding', 'gemini_api_key');
+        if (empty($apiKey)) {
+            mtrace("[AUTOGRADING TASK] Gemini API key not configured");
+            return null;
         }
 
         // Get the configured model or use default.
-        $model = 'gemini-2.5-flash';
+        $model = get_config('local_autograding', 'gemini_model') ?: 'gemini-2.5-flash';
 
         // Build the API endpoint URL.
         $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
 
-        // Prepare the request payload.
+        // Build the content parts array.
+        $contentParts = [];
+
+        // If we have images, add them first (vision grading).
+        if (!empty($imageParts)) {
+            mtrace("[AUTOGRADING TASK] Building vision payload with " . count($imageParts) . " image(s)");
+
+            foreach ($imageParts as $imagePart) {
+                $contentParts[] = [
+                    'inlineData' => [
+                        'mimeType' => $imagePart['mimeType'],
+                        'data' => $imagePart['data'],
+                    ],
+                ];
+                mtrace("[AUTOGRADING TASK] Added image: " . ($imagePart['filename'] ?? 'unknown') . " ({$imagePart['mimeType']})");
+            }
+        }
+
+        // Add the text prompt (already contains image-specific instructions if needed).
+        $contentParts[] = ['text' => $userContent];
+
+        // Prepare the request payload with systemInstruction.
         $payload = [
+            'systemInstruction' => [
+                'parts' => [
+                    ['text' => $systemInstruction],
+                ],
+            ],
             'contents' => [
                 [
-                    'parts' => [
-                        ['text' => $prompt],
-                    ],
+                    'role' => 'user',
+                    'parts' => $contentParts,
                 ],
             ],
             'generationConfig' => [
-                'temperature' => 0.3,
+                'temperature' => 0.1,
                 'topK' => 40,
                 'topP' => 0.95,
                 'maxOutputTokens' => 8192,
@@ -434,21 +658,22 @@ class grade_submission_task extends \core\task\adhoc_task {
         ];
 
         try {
-            // Use Moodle's HTTP client (curl wrapper).
-            $curl = new \curl();
-            $curl->setopt([
-                'CURLOPT_HTTPHEADER' => [
-                    'Content-Type: application/json',
-                ],
-                'CURLOPT_TIMEOUT' => 60,
-                'CURLOPT_RETURNTRANSFER' => true,
-            ]);
+            // Use Moodle's HTTP client.
+            $client = new \core\http_client();
 
             mtrace("[AUTOGRADING TASK] API Model: " . $model);
             mtrace("[AUTOGRADING TASK] Sending request to Gemini API...");
 
-            $response = $curl->post($endpoint, json_encode($payload));
-            $httpcode = $curl->get_info()['http_code'] ?? 0;
+            $response = $client->post($endpoint, [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                ],
+                'body' => json_encode($payload),
+                'timeout' => 60,
+            ]);
+
+            $httpcode = $response->getStatusCode();
+            $responseBody = $response->getBody()->getContents();
 
             mtrace("[AUTOGRADING TASK] HTTP Response Code: " . $httpcode);
 
@@ -460,12 +685,12 @@ class grade_submission_task extends \core\task\adhoc_task {
             }
 
             if ($httpcode !== 200) {
-                $errorMsg = "HTTP {$httpcode}: " . substr($response, 0, 500);
+                $errorMsg = "HTTP {$httpcode}: " . substr($responseBody, 0, 500);
                 mtrace("[AUTOGRADING TASK] API ERROR: " . $errorMsg);
                 return null;
             }
 
-            $responseData = json_decode($response, true);
+            $responseData = json_decode($responseBody, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
                 mtrace("[AUTOGRADING TASK] JSON decode error: " . json_last_error_msg());
@@ -487,85 +712,216 @@ class grade_submission_task extends \core\task\adhoc_task {
             // Re-throw moodle_exception (including rate limit) to trigger retry.
             throw $e;
         } catch (\Exception $e) {
-            mtrace("[AUTOGRADING TASK] API Exception: " . $e->getMessage());
+            mtrace("[AUTOGRADING TASK] Gemini API Exception: " . $e->getMessage());
             return null;
         }
     }
 
     /**
-     * Build the grading prompt with reference answer.
+     * Call the Local Qwen API for grading (OpenAI-compatible format).
+     *
+     * Note: Local Qwen (text-model) cannot process images. If images are submitted,
+     * they will be ignored and a warning will be included in the feedback.
+     *
+     * @param string $systemInstruction The system instruction for the AI
+     * @param string $userContent The user content (grading request)
+     * @param array $imageParts Array of image parts (will be ignored with warning)
+     * @return array|null Array with 'grade' and 'explanation', or null on error
+     * @throws \moodle_exception When rate limited (HTTP 429) to trigger retry.
+     */
+    private function call_qwen_api(string $systemInstruction, string $userContent, array $imageParts = []): ?array {
+        // Check if images were submitted - Qwen cannot process them.
+        $imageWarning = '';
+        if (!empty($imageParts)) {
+            mtrace("[AUTOGRADING TASK] WARNING: " . count($imageParts) . " image(s) submitted but Local Qwen cannot process images");
+            $imageWarning = get_string('qwen_image_warning', 'local_autograding');
+
+            // If there's no text content and only images, we cannot grade.
+            if (empty(trim($userContent)) || $userContent === $this->build_user_content_without_reference('', '')) {
+                mtrace("[AUTOGRADING TASK] ERROR: Only images submitted but Qwen cannot process images");
+                return [
+                    'grade' => 0,
+                    'explanation' => get_string('qwen_image_only_error', 'local_autograding'),
+                ];
+            }
+        }
+
+        // Get endpoint URL.
+        $endpoint = get_config('local_autograding', 'qwen_endpoint');
+        if (empty($endpoint)) {
+            $endpoint = 'http://localhost:11434/v1/chat/completions';
+        }
+
+        // Get the configured model or use default.
+        $model = get_config('local_autograding', 'qwen_model') ?: 'qwen2.5-3b-instruct';
+
+        // Prepare the request payload (OpenAI-compatible format).
+        $payload = [
+            'model' => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => $systemInstruction],
+                ['role' => 'user', 'content' => $userContent],
+            ],
+            'temperature' => 0.2,
+            'max_tokens' => 500,
+        ];
+
+        mtrace("[AUTOGRADING TASK] payload " . json_encode($payload, JSON_UNESCAPED_UNICODE));
+
+        try {
+            // Use Moodle's HTTP client.
+            $client = new \core\http_client();
+
+            mtrace("[AUTOGRADING TASK] API Model: " . $model);
+            mtrace("[AUTOGRADING TASK] Sending request to Qwen API at: " . $endpoint);
+
+            $response = $client->post($endpoint, [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                ],
+                'body' => json_encode($payload),
+                'timeout' => 120, // Longer timeout for local models.
+            ]);
+
+            $httpcode = $response->getStatusCode();
+            $responseBody = $response->getBody()->getContents();
+
+            mtrace("[AUTOGRADING TASK] HTTP Response Code: " . $httpcode);
+
+            // Handle rate limiting - throw exception to trigger retry.
+            if ($httpcode === 429) {
+                mtrace("[AUTOGRADING TASK] Rate limited (HTTP 429), task will be retried");
+                throw new \moodle_exception('ratelimited', 'local_autograding', '', null,
+                    'API rate limit exceeded, task will be automatically retried');
+            }
+
+            if ($httpcode !== 200) {
+                $errorMsg = "HTTP {$httpcode}: " . substr($responseBody, 0, 500);
+                mtrace("[AUTOGRADING TASK] API ERROR: " . $errorMsg);
+                return null;
+            }
+
+            $responseData = json_decode($responseBody, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                mtrace("[AUTOGRADING TASK] JSON decode error: " . json_last_error_msg());
+                return null;
+            }
+
+            // Extract the text content from OpenAI-compatible response.
+            $textContent = $responseData['choices'][0]['message']['content'] ?? null;
+
+            if (empty($textContent)) {
+                mtrace("[AUTOGRADING TASK] No text content in response");
+                return null;
+            }
+
+            // Parse the JSON from the response text.
+            $result = $this->parse_grading_response($textContent);
+
+            // Append image warning to explanation if images were submitted.
+            if ($result !== null && !empty($imageWarning)) {
+                $result['explanation'] = $imageWarning . "\n\n" . $result['explanation'];
+            }
+
+            return $result;
+
+        } catch (\moodle_exception $e) {
+            // Re-throw moodle_exception (including rate limit) to trigger retry.
+            throw $e;
+        } catch (\Exception $e) {
+            mtrace("[AUTOGRADING TASK] Qwen API Exception: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Build the user content for grading with reference answer.
      *
      * @param string $question The question
      * @param string $referenceAnswer The reference answer
      * @param string $studentResponse The student's response
-     * @return string The complete prompt
+     * @return string The user content for the AI
      */
-    private function build_prompt_with_reference(string $question, string $referenceAnswer, string $studentResponse): string {
-        return "Hãy đóng vai trò là một chuyên gia chấm thi khách quan và nghiêm khắc. Nhiệm vụ của bạn là đánh giá câu trả lời của học sinh dựa trên câu hỏi và đáp án chuẩn được cung cấp.
+    private function build_user_content_with_reference(string $question, string $referenceAnswer, string $studentResponse): string {
+        return "---
+                    [CÂU HỎI]:
+                    {$question}
+                    [ĐÁP ÁN CHUẨN]:
+                    {$referenceAnswer}
+                    [CÂU TRẢ LỜI CỦA HỌC SINH]:
+                    {$studentResponse}
+                ---
+                ";
+    }
 
-Dưới đây là dữ liệu đầu vào:
----
+    /**
+     * Build the user content for grading without reference answer (option 1).
+     *
+     * @param string $question The question
+     * @param string $studentResponse The student's response
+     * @return string The user content for the AI
+     */
+    private function build_user_content_without_reference(string $question, string $studentResponse): string {
+        return "---
+                    [CÂU HỎI]:
+                    {$question}
+                    [CÂU TRẢ LỜI CỦA HỌC SINH]:
+                    {$studentResponse}
+                ---
+                ";
+    }
+
+    /**
+     * Build the user content for image-based grading with reference answer.
+     *
+     * This method creates a prompt for grading handwritten submissions
+     * where the student's answer is in attached images.
+     *
+     * @param string $question The question
+     * @param string $referenceAnswer The reference answer
+     * @return string The user content for the AI (Heredoc format)
+     */
+    private function build_image_content_with_reference(string $question, string $referenceAnswer): string {
+        return <<<EOT
 [CÂU HỎI]:
 {$question}
 
 [ĐÁP ÁN CHUẨN]:
 {$referenceAnswer}
 
-[CÂU TRẢ LỜI CỦA HỌC SINH]:
-{$studentResponse}
----
+[BÀI LÀM CỦA HỌC SINH]:
+(Vui lòng xem các hình ảnh bài làm viết tay được đính kèm trong request này)
 
-Yêu cầu xử lý:
-1. So sánh kỹ lưỡng ý nghĩa, từ khóa và logic của câu trả lời học sinh so với đáp án chuẩn.
-2. Chấm điểm trên thang điểm từ 0 đến 10 (có thể dùng số thập phân, ví dụ: 8.5).
-   - 0 điểm: Sai hoàn toàn hoặc không trả lời.
-   - 10 điểm: Chính xác hoàn toàn, đầy đủ ý như đáp án chuẩn.
-3. Giải thích ngắn gọn lý do tại sao cho số điểm đó (chỉ ra lỗi sai hoặc phần thiếu nếu có).
-
-QUAN TRỌNG:
-- Bạn chỉ được phép trả về kết quả dưới dạng JSON thuần túy.
-- Không được thêm bất kỳ văn bản, lời chào, hay định dạng markdown (```json) nào khác vào đầu hoặc cuối.
-- Cấu trúc JSON bắt buộc như sau:
-{
-  \"grade\": <số_điểm>,
-  \"explanation\": \"<lời_giải_thích>\"
-}";
+[YÊU CẦU CHẤM ĐIỂM]:
+1. Hãy quan sát kỹ các hình ảnh, trích xuất nội dung chữ viết tay của học sinh.
+2. Nếu có nhiều ảnh, hãy tự động ghép nối nội dung theo thứ tự hợp lý.
+3. So sánh nội dung đó với [CÂU HỎI] và [ĐÁP ÁN CHUẨN] để chấm điểm và đưa ra nhận xét chi tiết.
+EOT;
     }
 
     /**
-     * Build the grading prompt without reference answer (option 1).
+     * Build the user content for image-based grading without reference answer (option 1).
+     *
+     * This method creates a prompt for grading handwritten submissions
+     * where no reference answer is provided.
      *
      * @param string $question The question
-     * @param string $studentResponse The student's response
-     * @return string The complete prompt
+     * @return string The user content for the AI (Heredoc format)
      */
-    private function build_prompt_without_reference(string $question, string $studentResponse): string {
-        return "Hãy đóng vai trò là một chuyên gia chấm thi khách quan và nghiêm khắc. Nhiệm vụ của bạn là đánh giá câu trả lời của học sinh dựa trên câu hỏi được cung cấp.
-
-Dưới đây là dữ liệu đầu vào:
----
+    private function build_image_content_without_reference(string $question): string {
+        return <<<EOT
 [CÂU HỎI]:
 {$question}
 
-[CÂU TRẢ LỜI CỦA HỌC SINH]:
-{$studentResponse}
----
+[BÀI LÀM CỦA HỌC SINH]:
+(Vui lòng xem các hình ảnh bài làm viết tay được đính kèm trong request này)
 
-Yêu cầu xử lý:
-1. Đánh giá câu trả lời của học sinh dựa trên kiến thức chuyên môn và yêu cầu của câu hỏi.
-2. Chấm điểm trên thang điểm từ 0 đến 10 (có thể dùng số thập phân, ví dụ: 8.5).
-   - 0 điểm: Sai hoàn toàn hoặc không trả lời.
-   - 10 điểm: Chính xác hoàn toàn, đầy đủ và logic.
-3. Giải thích ngắn gọn lý do tại sao cho số điểm đó (chỉ ra lỗi sai hoặc phần thiếu nếu có).
-
-QUAN TRỌNG:
-- Bạn chỉ được phép trả về kết quả dưới dạng JSON thuần túy.
-- Không được thêm bất kỳ văn bản, lời chào, hay định dạng markdown (```json) nào khác vào đầu hoặc cuối.
-- Cấu trúc JSON bắt buộc như sau:
-{
-  \"grade\": <số_điểm>,
-  \"explanation\": \"<lời_giải_thích>\"
-}";
+[YÊU CẦU CHẤM ĐIỂM]:
+1. Hãy quan sát kỹ các hình ảnh, trích xuất nội dung chữ viết tay của học sinh.
+2. Nếu có nhiều ảnh, hãy tự động ghép nối nội dung theo thứ tự hợp lý.
+3. Dựa trên kiến thức chuyên môn và yêu cầu của [CÂU HỎI], hãy chấm điểm và đưa ra nhận xét chi tiết.
+EOT;
     }
 
     /**

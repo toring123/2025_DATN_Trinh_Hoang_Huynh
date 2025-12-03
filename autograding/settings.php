@@ -18,6 +18,35 @@ if ($hassiteconfig) {
         get_string('pluginname', 'local_autograding')
     );
 
+    // Add AI Provider section header.
+    $settings->add(new admin_setting_heading(
+        'local_autograding/ai_provider_header',
+        get_string('ai_provider_header', 'local_autograding'),
+        get_string('ai_provider_header_desc', 'local_autograding')
+    ));
+
+    // Add AI Provider selection setting.
+    $providers = [
+        'gemini' => get_string('provider_gemini', 'local_autograding'),
+        'qwen' => get_string('provider_qwen', 'local_autograding'),
+    ];
+    $settings->add(new admin_setting_configselect(
+        'local_autograding/ai_provider',
+        get_string('ai_provider', 'local_autograding'),
+        get_string('ai_provider_desc', 'local_autograding'),
+        'gemini',
+        $providers
+    ));
+
+    // Add System Instruction textarea.
+    $defaultinstruction = get_string('system_instruction_default', 'local_autograding');
+    $settings->add(new admin_setting_configtextarea(
+        'local_autograding/system_instruction',
+        get_string('system_instruction', 'local_autograding'),
+        get_string('system_instruction_desc', 'local_autograding'),
+        $defaultinstruction
+    ));
+
     // Add Gemini API section header.
     $settings->add(new admin_setting_heading(
         'local_autograding/gemini_header',
@@ -35,19 +64,94 @@ if ($hassiteconfig) {
 
     // Add Gemini Model selection setting.
     $models = [
-        'gemini-2.0-flash' => 'Gemini 2.0 Flash (Recommended)',
+        'gemini-2.5-flash' => 'Gemini 2.5 Flash (Recommended)',
+        'gemini-2.0-flash' => 'Gemini 2.0 Flash',
         'gemini-1.5-flash' => 'Gemini 1.5 Flash',
         'gemini-1.5-pro' => 'Gemini 1.5 Pro',
-        'gemini-pro' => 'Gemini Pro (Legacy)',
     ];
     $settings->add(new admin_setting_configselect(
         'local_autograding/gemini_model',
         get_string('gemini_model', 'local_autograding'),
         get_string('gemini_model_desc', 'local_autograding'),
-        'gemini-2.0-flash',
+        'gemini-2.5-flash',
         $models
+    ));
+
+    // Add Local Qwen section header.
+    $settings->add(new admin_setting_heading(
+        'local_autograding/qwen_header',
+        get_string('qwen_settings_header', 'local_autograding'),
+        get_string('qwen_settings_desc', 'local_autograding')
+    ));
+
+    // Add Local Qwen Endpoint URL setting.
+    $settings->add(new admin_setting_configtext(
+        'local_autograding/qwen_endpoint',
+        get_string('qwen_endpoint', 'local_autograding'),
+        get_string('qwen_endpoint_desc', 'local_autograding'),
+        'http://localhost:11434/v1/chat/completions'
+    ));
+
+    // Add Local Qwen Model setting.
+    $settings->add(new admin_setting_configtext(
+        'local_autograding/qwen_model',
+        get_string('qwen_model', 'local_autograding'),
+        get_string('qwen_model_desc', 'local_autograding'),
+        'qwen2.5-3b-instruct'
     ));
 
     // Add the settings page to the local plugins category.
     $ADMIN->add('localplugins', $settings);
+
+    // Inject JavaScript for conditional display of provider-specific settings.
+    // This script will show/hide Gemini or Qwen settings based on the selected provider.
+    $PAGE->requires->js_amd_inline("
+        require(['jquery'], function($) {
+            $(document).ready(function() {
+                var providerSelect = $('#id_s_local_autograding_ai_provider');
+
+                // Define the setting rows to toggle.
+                var geminiSettings = [
+                    '#admin-gemini_header',
+                    '#admin-gemini_api_key',
+                    '#admin-gemini_model'
+                ];
+                var qwenSettings = [
+                    '#admin-qwen_header',
+                    '#admin-qwen_endpoint',
+                    '#admin-qwen_model'
+                ];
+
+                function toggleProviderSettings() {
+                    var selectedProvider = providerSelect.val();
+
+                    if (selectedProvider === 'gemini') {
+                        // Show Gemini settings, hide Qwen settings.
+                        geminiSettings.forEach(function(selector) {
+                            $(selector).closest('.form-item, .row').show();
+                        });
+                        qwenSettings.forEach(function(selector) {
+                            $(selector).closest('.form-item, .row').hide();
+                        });
+                    } else if (selectedProvider === 'qwen') {
+                        // Show Qwen settings, hide Gemini settings.
+                        geminiSettings.forEach(function(selector) {
+                            $(selector).closest('.form-item, .row').hide();
+                        });
+                        qwenSettings.forEach(function(selector) {
+                            $(selector).closest('.form-item, .row').show();
+                        });
+                    }
+                }
+
+                // Initial toggle on page load.
+                toggleProviderSettings();
+
+                // Toggle on provider change.
+                providerSelect.on('change', function() {
+                    toggleProviderSettings();
+                });
+            });
+        });
+    ");
 }

@@ -46,7 +46,46 @@ $string['gemini_settings_desc'] = 'Configure the Google Gemini API for automatic
 $string['gemini_api_key'] = 'Gemini API Key';
 $string['gemini_api_key_desc'] = 'Enter your Google Gemini API key. This key is used to authenticate requests to the Gemini AI service for automatic grading.';
 $string['gemini_model'] = 'Gemini Model';
-$string['gemini_model_desc'] = 'Select the Gemini model to use for grading. Gemini 2.0 Flash is recommended for balance of speed and quality.';
+$string['gemini_model_desc'] = 'Select the Gemini model to use for grading. Gemini 2.5 Flash is recommended for balance of speed and quality.';
+
+// AI Provider Settings.
+$string['ai_provider_header'] = 'AI Provider Settings';
+$string['ai_provider_header_desc'] = 'Configure the AI provider for automatic grading. You can choose between Google Gemini (cloud) or Local Qwen (self-hosted).';
+$string['ai_provider'] = 'AI Provider';
+$string['ai_provider_desc'] = 'Select the AI provider to use for automatic grading.';
+$string['provider_gemini'] = 'Google Gemini (Cloud)';
+$string['provider_qwen'] = 'Local Qwen (Self-hosted)';
+
+// System Instruction Settings.
+$string['system_instruction'] = 'System Instruction';
+$string['system_instruction_desc'] = 'Define the AI persona and behavior for grading. This instruction will be sent to the AI as a system message to guide how it should grade submissions.';
+$string['system_instruction_default'] = '
+Hãy đóng vai trò là một chuyên gia chấm thi khách quan và nghiêm khắc. Nhiệm vụ của bạn là đánh giá câu trả lời của học sinh dựa trên câu hỏi và đáp án chuẩn được cung cấp.
+Yêu cầu xử lý:
+1. So sánh kỹ lưỡng ý nghĩa, từ khóa và logic của [BÀI LÀM CỦA HỌC SINH] so với [CÂU HỎI] và [ĐÁP ÁN CHUẨN].
+2. Chấm điểm trên thang điểm từ 0 đến 10 (có thể dùng số thập phân).
+- 0 điểm: Sai hoàn toàn hoặc không trả lời.
+- 10 điểm: Chính xác hoàn toàn, đầy đủ ý như [ĐÁP ÁN CHUẨN].
+3. Giải thích ngắn gọn lý do tại sao cho số điểm đó (chỉ ra lỗi sai hoặc phần thiếu nếu có).
+';
+$string['system_instruction_footer'] = '
+QUAN TRỌNG:
+- Bạn chỉ được phép trả về kết quả dưới dạng JSON thuần túy.
+- Không được thêm bất kỳ văn bản, lời chào, hay định dạng markdown (```json) nào khác vào đầu hoặc cuối.
+- Cấu trúc JSON bắt buộc như sau: {\"grade\": <số_điểm>, \"explanation\": \"<lời_giải_thích>\"}";
+Ví dụ phản hồi JSON hợp lệ:
+{
+  "grade": 8.5,
+  "explanation": "Câu trả lời đúng về mặt ý chính nhưng thiếu một số chi tiết quan trọng so với đáp án chuẩn."
+}';
+
+// Local Qwen Settings.
+$string['qwen_settings_header'] = 'Local Qwen AI Settings';
+$string['qwen_settings_desc'] = 'Configure the local Qwen AI endpoint for automatic grading. This requires a self-hosted Qwen model with OpenAI-compatible API.';
+$string['qwen_endpoint'] = 'Qwen Endpoint URL';
+$string['qwen_endpoint_desc'] = 'Enter the URL of your local Qwen API endpoint. Default: http://localhost:11434/v1/chat/completions';
+$string['qwen_model'] = 'Qwen Model';
+$string['qwen_model_desc'] = 'Enter the Qwen model name to use. Default: qwen2.5-3b-instruct';
 
 // Auto-grading messages.
 $string['autograding_disabled'] = 'Auto-grading is not enabled for this assignment.';
@@ -62,3 +101,7 @@ $string['autograding_feedback_prefix'] = '[AI Auto-Grading]';
 $string['task_grade_submission'] = 'Process auto-grading for assignment submission';
 $string['ratelimited'] = 'API rate limit exceeded';
 $string['locktimeout'] = 'Could not acquire lock for API call';
+
+// Image grading strings (for Qwen provider limitations).
+$string['qwen_image_warning'] = '[Note: Image(s) were submitted but could not be processed by Local Qwen. Only text content was graded. For image/handwriting grading, please use Gemini provider.]';
+$string['qwen_image_only_error'] = 'This submission contains only image files, but the Local Qwen provider cannot process images. Please switch to Gemini provider for image/handwriting grading, or ask the student to resubmit in text format.';
