@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="local/autorestrict/db" VERSION="20251202" COMMENT="XMLDB file for local_autorestrict">
+<XMLDB PATH="local/autorestrict/db" VERSION="20251204" COMMENT="XMLDB file for local_autorestrict">
   <TABLES>
     <TABLE NAME="local_autorestrict_course" COMMENT="Auto restrict settings per course">
       <FIELDS>
@@ -18,6 +18,12 @@
         <FIELD NAME="min_diff1_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="4"/>
         <FIELD NAME="min_diff2_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="3"/>
         <FIELD NAME="min_diff3_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="2"/>
+        <FIELD NAME="section_min_diff1_for_diff2" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Section: diff1 completions for diff2"/>
+        <FIELD NAME="section_min_diff1_for_diff3" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Section: diff1 completions for diff3"/>
+        <FIELD NAME="section_min_diff2_for_diff3" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Section: diff2 completions for diff3"/>
+        <FIELD NAME="section_min_diff1_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Section: diff1 completions for diff4"/>
+        <FIELD NAME="section_min_diff2_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Section: diff2 completions for diff4"/>
+        <FIELD NAME="section_min_diff3_for_diff4" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" COMMENT="Section: diff3 completions for diff4"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0"/>
       </FIELDS>

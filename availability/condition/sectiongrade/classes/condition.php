@@ -12,34 +12,18 @@ namespace availability_sectiongrade;
 defined('MOODLE_INTERNAL') || die();
 
 class condition extends \core_availability\condition {
-    
+
     /** @var int Section number */
     protected $sectionnumber;
-    
+
     /** @var float Minimum average grade required (percentage) */
     protected $mingrade;
-    
-    /**
-     * Constructor
-     *
-     * @param \stdClass $structure Data structure from JSON decode
-     */
+
     public function __construct($structure) {
-        if (isset($structure->section)) {
-            $this->sectionnumber = (int)$structure->section;
-        }
-        if (isset($structure->mingrade)) {
-            $this->mingrade = (float)$structure->mingrade;
-        } else {
-            $this->mingrade = 50.0;
-        }
+        $this->sectionnumber = isset($structure->section) ? (int)$structure->section : 0;
+        $this->mingrade = isset($structure->mingrade) ? (float)$structure->mingrade : 50.0;
     }
-    
-    /**
-     * Save the data
-     *
-     * @return \stdClass Structure to save
-     */
+
     public function save() {
         return (object)[
             'type' => 'sectiongrade',
@@ -47,154 +31,98 @@ class condition extends \core_availability\condition {
             'mingrade' => $this->mingrade
         ];
     }
-    
-    /**
-     * Check if user is available
-     *
-     * @param bool $not Set true if we are inverting the condition
-     * @param \core_availability\info $info Item we're checking
-     * @param bool $grabthelot Performance hint
-     * @param int $userid User ID to check availability for
-     * @return bool True if available
-     */
+
     public function is_available($not, \core_availability\info $info, $grabthelot, $userid) {
-        $course = $info->get_course();
-        $averagegrade = $this->get_section_average_grade($course->id, $this->sectionnumber, $userid);
+        // Tận dụng logic của filter_user_list để tránh viết lặp code
+        // Tạo mảng giả lập 1 user để check
+        $users = [$userid => true]; 
+        $filtered = $this->filter_user_list($users, $not, $info, null);
         
-        $allow = ($averagegrade >= $this->mingrade);
-        
-        if ($not) {
-            $allow = !$allow;
-        }
-        
-        return $allow;
+        return array_key_exists($userid, $filtered);
     }
-    
-    /**
-     * Get the average grade for a user in a section
-     *
-     * @param int $courseid Course ID
-     * @param int $sectionnumber Section number
-     * @param int $userid User ID
-     * @return float Average grade percentage
-     */
-    protected function get_section_average_grade($courseid, $sectionnumber, $userid) {
-        global $DB;
-        
-        // Get all graded activities in the section
-        $sql = "SELECT cm.id, cm.instance, m.name as modname, gi.id as gradeitemid
-                FROM {course_modules} cm
-                JOIN {course_sections} cs ON cs.id = cm.section
-                JOIN {modules} m ON m.id = cm.module
-                JOIN {grade_items} gi ON gi.iteminstance = cm.instance 
-                    AND gi.itemmodule = m.name AND gi.courseid = cm.course
-                WHERE cm.course = :courseid
-                AND cs.section = :sectionnumber
-                AND gi.itemtype = 'mod'";
-        
-        $activities = $DB->get_records_sql($sql, [
-            'courseid' => $courseid,
-            'sectionnumber' => $sectionnumber
-        ]);
-        
-        if (empty($activities)) {
-            return 0;
-        }
-        
-        $totalpercentage = 0;
-        $count = 0;
-        
-        foreach ($activities as $activity) {
-            $grade = $DB->get_record('grade_grades', [
-                'itemid' => $activity->gradeitemid,
-                'userid' => $userid
-            ]);
-            
-            if ($grade && $grade->finalgrade !== null) {
-                $gradeitem = $DB->get_record('grade_items', ['id' => $activity->gradeitemid]);
-                if ($gradeitem && $gradeitem->grademax > 0) {
-                    $percentage = ($grade->finalgrade / $gradeitem->grademax) * 100;
-                    $totalpercentage += $percentage;
-                    $count++;
-                }
-            }
-        }
-        
-        if ($count == 0) {
-            return 0;
-        }
-        
-        return $totalpercentage / $count;
-    }
-    
-    /**
-     * Get description of restriction
-     *
-     * @param bool $full Set true if this is the 'full information' view
-     * @param bool $not Set true if we are inverting the condition
-     * @param \core_availability\info $info Item we're checking
-     * @return string Information string about restriction
-     */
-    public function get_description($full, $not, \core_availability\info $info) {
-        if ($not) {
-            return get_string('requires_notgrade', 'availability_sectiongrade', 
-                ['section' => $this->sectionnumber, 'grade' => $this->mingrade]);
-        } else {
-            return get_string('requires_grade', 'availability_sectiongrade', 
-                ['section' => $this->sectionnumber, 'grade' => $this->mingrade]);
-        }
-    }
-    
-    /**
-     * Get debug string
-     *
-     * @return string Debug string
-     */
-    protected function get_debug_string() {
-        return 'section:' . $this->sectionnumber . ' mingrade:' . $this->mingrade;
-    }
-    
-    /**
-     * Check if this condition applies to user lists
-     *
-     * @return bool True if this condition applies to user lists
-     */
+
     public function is_applied_to_user_lists() {
         return true;
     }
-    
+
     /**
-     * Filter the user list
-     *
-     * @param array $users Array of users
-     * @param bool $not True if condition is negated
-     * @param \core_availability\info $info Info about item
-     * @param \core_availability\capability_checker $checker Capability checker
-     * @return array Filtered array of users
+     * Hàm lọc danh sách user đã được tối ưu hiệu năng (Bulk processing)
+     * Chỉ tính trung bình các bài user NHÌN THẤY ĐƯỢC và ĐÃ ĐƯỢC CHẤM ĐIỂM
      */
-    public function filter_user_list(array $users, $not, \core_availability\info $info,
-            \core_availability\capability_checker $checker) {
-        
+    public function filter_user_list(array $users, $not, \core_availability\info $info, $checker) {
+        global $DB;
+
         if (empty($users)) {
             return $users;
         }
-        
+
         $course = $info->get_course();
+        $userids = array_keys($users);
+        
+        // Phải tính riêng cho từng user vì uservisible khác nhau
         $result = [];
         
         foreach ($users as $userid => $user) {
-            $averagegrade = $this->get_section_average_grade($course->id, $this->sectionnumber, $userid);
-            $meets = ($averagegrade >= $this->mingrade);
+            // Lấy modinfo cho user này để check uservisible
+            $modinfo = get_fast_modinfo($course, $userid);
             
-            if ($not) {
-                $meets = !$meets;
+            // Tìm các CM IDs mà user này nhìn thấy được trong section
+            $visibleCmIds = [];
+            foreach ($modinfo->get_cms() as $cm) {
+                if ($cm->sectionnum == $this->sectionnumber && $cm->uservisible) {
+                    $visibleCmIds[] = $cm->id;
+                }
             }
             
-            if ($meets) {
+            $average = 0;
+            
+            if (!empty($visibleCmIds)) {
+                // Query grades chỉ cho các activities mà user nhìn thấy
+                list($insql, $params) = $DB->get_in_or_equal($visibleCmIds, SQL_PARAMS_NAMED);
+                $params['userid'] = $userid;
+                $params['courseid'] = $course->id;
+                
+                $sql = "SELECT SUM(gg.finalgrade - gi.grademin) as total_achieved,
+                               SUM(gi.grademax - gi.grademin) as total_max
+                        FROM {course_modules} cm
+                        JOIN {modules} m ON m.id = cm.module
+                        JOIN {grade_items} gi ON gi.iteminstance = cm.instance 
+                             AND gi.itemmodule = m.name 
+                             AND gi.courseid = :courseid
+                             AND gi.itemtype = 'mod'
+                        JOIN {grade_grades} gg ON gg.itemid = gi.id AND gg.userid = :userid
+                        WHERE cm.id $insql
+                          AND gg.finalgrade IS NOT NULL
+                          AND gi.grademax > gi.grademin";
+                
+                $grade = $DB->get_record_sql($sql, $params);
+                
+                if ($grade && $grade->total_max > 0) {
+                    $average = ($grade->total_achieved / $grade->total_max) * 100;
+                }
+            }
+            
+            // Check điều kiện
+            $allow = ($average >= $this->mingrade);
+            if ($not) {
+                $allow = !$allow;
+            }
+            
+            if ($allow) {
                 $result[$userid] = $user;
             }
         }
-        
+
         return $result;
+    }
+
+    public function get_description($full, $not, \core_availability\info $info) {
+        $str = $not ? 'requires_notgrade' : 'requires_grade';
+        return get_string($str, 'availability_sectiongrade', 
+            ['section' => $this->sectionnumber, 'grade' => $this->mingrade]);
+    }
+
+    protected function get_debug_string() {
+        return 'section:' . $this->sectionnumber . ' mingrade:' . $this->mingrade;
     }
 }

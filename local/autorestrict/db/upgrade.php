@@ -47,6 +47,49 @@ function xmldb_local_autorestrict_upgrade($oldversion) {
 
         upgrade_plugin_savepoint(true, 2025120200, 'local', 'autorestrict');
     }
+    
+    if ($oldversion < 2025120400) {
+        // Add section-based difficulty requirements fields.
+        $table = new xmldb_table('local_autorestrict_course');
+        
+        // Section diff1 for diff2.
+        $field = new xmldb_field('section_min_diff1_for_diff2', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'min_diff3_for_diff4');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Section diff1 for diff3.
+        $field = new xmldb_field('section_min_diff1_for_diff3', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff1_for_diff2');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Section diff2 for diff3.
+        $field = new xmldb_field('section_min_diff2_for_diff3', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff1_for_diff3');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Section diff1 for diff4.
+        $field = new xmldb_field('section_min_diff1_for_diff4', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff2_for_diff3');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Section diff2 for diff4.
+        $field = new xmldb_field('section_min_diff2_for_diff4', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff1_for_diff4');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        // Section diff3 for diff4.
+        $field = new xmldb_field('section_min_diff3_for_diff4', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff2_for_diff4');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        
+        upgrade_plugin_savepoint(true, 2025120400, 'local', 'autorestrict');
+    }
 
     return true;
 }

@@ -87,5 +87,11 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('pluginname', 'local_autorestrict'));
 echo html_writer::tag('p', get_string('course_settings_desc', 'local_autorestrict'));
 
+// Link to bulk difficulty page.
+$bulkUrl = new moodle_url('/local/autorestrict/bulk_difficulty.php', ['courseid' => $courseid]);
+echo html_writer::tag('p', 
+    html_writer::link($bulkUrl, get_string('manage_difficulty', 'local_autorestrict'), ['class' => 'btn btn-secondary'])
+);
+
 $form->display();
 echo $OUTPUT->footer();

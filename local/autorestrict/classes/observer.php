@@ -274,7 +274,7 @@ class observer {
     }
     
     /**
-     * Get the difficulty tag for a module
+     * Get the difficulty tag for a module (returns highest if multiple)
      *
      * @param int $cmid Course module ID
      * @return string|null Tag name or null
@@ -282,16 +282,83 @@ class observer {
     protected static function get_module_difficulty_tag($cmid) {
         global $DB;
         
+        // Get all difficulty tags for this module
         $sql = "SELECT t.name
                 FROM {tag} t
                 JOIN {tag_instance} ti ON ti.tagid = t.id
                 WHERE ti.itemid = :cmid
                 AND ti.itemtype = 'course_modules'
                 AND t.name IN ('diff1', 'diff2', 'diff3', 'diff4')
-                LIMIT 1";
+                ORDER BY t.name DESC";
         
-        $tag = $DB->get_field_sql($sql, ['cmid' => $cmid]);
-        return $tag ?: null;
+        $tags = $DB->get_records_sql($sql, ['cmid' => $cmid]);
+        
+        if (empty($tags)) {
+            return null;
+        }
+        
+        // Return the highest difficulty (diff4 > diff3 > diff2 > diff1)
+        foreach ($tags as $tag) {
+            return $tag->name; // First one is highest due to DESC order
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Set difficulty tag for a module (removes other diff tags first)
+     *
+     * @param int $cmid Course module ID
+     * @param string $difftag Difficulty tag (diff1, diff2, diff3, diff4) or empty to remove
+     * @return bool Success
+     */
+    public static function set_module_difficulty($cmid, $difftag) {
+        global $DB;
+        
+        // Get the course module to find context
+        $cm = $DB->get_record('course_modules', ['id' => $cmid]);
+        if (!$cm) {
+            return false;
+        }
+        
+        $context = \context_module::instance($cmid);
+        
+        // Remove all existing difficulty tags
+        $existingTags = ['diff1', 'diff2', 'diff3', 'diff4'];
+        foreach ($existingTags as $tag) {
+            \core_tag_tag::remove_item_tag('core', 'course_modules', $cmid, $tag);
+        }
+        
+        // Add new tag if specified
+        if (!empty($difftag) && in_array($difftag, $existingTags)) {
+            \core_tag_tag::add_item_tag('core', 'course_modules', $cmid, $context, $difftag);
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Bulk set difficulty for multiple modules
+     *
+     * @param array $cmids Array of course module IDs
+     * @param string $difftag Difficulty tag
+     * @param int $courseid Course ID for cache purge
+     * @return array Results [success, failed]
+     */
+    public static function bulk_set_difficulty($cmids, $difftag, $courseid) {
+        $results = ['success' => 0, 'failed' => 0];
+        
+        foreach ($cmids as $cmid) {
+            if (self::set_module_difficulty($cmid, $difftag)) {
+                // Re-apply restrictions with new tag
+                self::apply_restriction_to_module($cmid, $courseid);
+                $results['success']++;
+            } else {
+                $results['failed']++;
+            }
+        }
+        
+        return $results;
     }
     
     /**
@@ -335,7 +402,7 @@ class observer {
         
         // Condition based on difficulty progression (applies to ALL sections including 0 and 1)
         if (!empty($config->require_difficulty_progression) && $difftag) {
-            $diffRequirements = self::get_difficulty_requirements($difftag, $config);
+            $diffRequirements = self::get_difficulty_requirements($difftag, $config, $sectionnumber);
             if ($diffRequirements) {
                 $conditions[] = $diffRequirements;
             }
@@ -363,32 +430,48 @@ class observer {
      *
      * @param string $difftag Current difficulty tag
      * @param object $config Plugin config
+     * @param int $sectionnumber Section number for section-based requirements
      * @return array|null Condition or null
      */
-    protected static function get_difficulty_requirements($difftag, $config) {
+    protected static function get_difficulty_requirements($difftag, $config, $sectionnumber) {
+        // Course-wide requirements (diff1, diff2, diff3, diff4)
+        // Section-based requirements (sectiondiff1, sectiondiff2, sectiondiff3, sectiondiff4)
         $requirements = [
             'type' => 'diffcomplete',
+            // Course-wide
             'diff1' => 0,
             'diff2' => 0,
             'diff3' => 0,
-            'diff4' => 0
+            'diff4' => 0,
+            // Section-based
+            'section' => $sectionnumber,
+            'sectiondiff1' => 0,
+            'sectiondiff2' => 0,
+            'sectiondiff3' => 0,
+            'sectiondiff4' => 0,
         ];
         
         switch ($difftag) {
             case 'diff2':
-                // Need to complete diff1 first
+                // Need to complete diff1 first - both in course and in section
                 $requirements['diff1'] = !empty($config->min_diff1_for_diff2) ? (int)$config->min_diff1_for_diff2 : 2;
+                $requirements['sectiondiff1'] = !empty($config->section_min_diff1_for_diff2) ? (int)$config->section_min_diff1_for_diff2 : 1;
                 break;
             case 'diff3':
                 // Need to complete diff1 and diff2 first
                 $requirements['diff1'] = !empty($config->min_diff1_for_diff3) ? (int)$config->min_diff1_for_diff3 : 3;
                 $requirements['diff2'] = !empty($config->min_diff2_for_diff3) ? (int)$config->min_diff2_for_diff3 : 2;
+                $requirements['sectiondiff1'] = !empty($config->section_min_diff1_for_diff3) ? (int)$config->section_min_diff1_for_diff3 : 1;
+                $requirements['sectiondiff2'] = !empty($config->section_min_diff2_for_diff3) ? (int)$config->section_min_diff2_for_diff3 : 1;
                 break;
             case 'diff4':
                 // Need to complete diff1, diff2, and diff3 first
                 $requirements['diff1'] = !empty($config->min_diff1_for_diff4) ? (int)$config->min_diff1_for_diff4 : 4;
                 $requirements['diff2'] = !empty($config->min_diff2_for_diff4) ? (int)$config->min_diff2_for_diff4 : 3;
                 $requirements['diff3'] = !empty($config->min_diff3_for_diff4) ? (int)$config->min_diff3_for_diff4 : 2;
+                $requirements['sectiondiff1'] = !empty($config->section_min_diff1_for_diff4) ? (int)$config->section_min_diff1_for_diff4 : 1;
+                $requirements['sectiondiff2'] = !empty($config->section_min_diff2_for_diff4) ? (int)$config->section_min_diff2_for_diff4 : 1;
+                $requirements['sectiondiff3'] = !empty($config->section_min_diff3_for_diff4) ? (int)$config->section_min_diff3_for_diff4 : 1;
                 break;
             default:
                 // diff1 - no requirements
@@ -396,5 +479,36 @@ class observer {
         }
         
         return $requirements;
+    }
+    
+    /**
+     * Handle course module completion updated event
+     * Purge cache to immediately reflect availability changes in course index
+     *
+     * @param \core\event\course_module_completion_updated $event
+     */
+    public static function course_module_completion_updated(\core\event\course_module_completion_updated $event) {
+        $courseid = $event->courseid;
+        
+        // Check if auto-restrict is enabled for this course
+        $config = self::get_course_config($courseid);
+        if (!$config || empty($config->enabled)) {
+            return;
+        }
+        
+        // Purge the course module info cache to refresh availability
+        \course_modinfo::purge_course_cache($courseid);
+        
+        // Also purge the course content cache
+        $cache = \cache::make('core', 'coursemodinfo');
+        $cache->delete($courseid);
+        
+        // Purge navigation cache
+        $navicache = \cache::make('core', 'navigation_expandcourse');
+        $navicache->purge();
+        
+        // Purge course content items cache
+        $ccicache = \cache::make('core', 'course_content_items');
+        $ccicache->delete($courseid);
     }
 }

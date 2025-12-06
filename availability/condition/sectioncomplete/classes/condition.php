@@ -81,22 +81,135 @@ class condition extends \core_availability\condition {
     protected function get_section_completion_count($courseid, $sectionnumber, $userid) {
         global $DB;
         
-        $sql = "SELECT COUNT(DISTINCT cm.id)
+        // First, get all course modules in the section
+        $sql = "SELECT cm.id, cm.module, cm.instance, cm.completion
                 FROM {course_modules} cm
                 JOIN {course_sections} cs ON cs.id = cm.section
-                JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id
                 WHERE cm.course = :courseid
                 AND cs.section = :sectionnumber
-                AND cmc.userid = :userid
-                AND cmc.completionstate >= :completionstate
-                AND cm.completion > 0";
+                AND cm.deletioninprogress = 0";
         
-        return $DB->count_records_sql($sql, [
+        $cms = $DB->get_records_sql($sql, [
             'courseid' => $courseid,
-            'sectionnumber' => $sectionnumber,
-            'userid' => $userid,
-            'completionstate' => COMPLETION_COMPLETE
+            'sectionnumber' => $sectionnumber
         ]);
+        
+        if (empty($cms)) {
+            return 0;
+        }
+        
+        $completedcount = 0;
+        
+        foreach ($cms as $cm) {
+            $iscompleted = false;
+            
+            // Check if activity has completion tracking enabled
+            if ($cm->completion > 0) {
+                // Check completion table
+                $completion = $DB->get_record('course_modules_completion', [
+                    'coursemoduleid' => $cm->id,
+                    'userid' => $userid
+                ]);
+                
+                if ($completion && $completion->completionstate >= COMPLETION_COMPLETE) {
+                    $iscompleted = true;
+                }
+            } else {
+                // For activities without completion tracking, check if they have submissions
+                $iscompleted = $this->has_user_submission($cm, $userid);
+            }
+            
+            if ($iscompleted) {
+                $completedcount++;
+            }
+        }
+        
+        return $completedcount;
+    }
+    
+    /**
+     * Check if user has made a submission for this activity
+     *
+     * @param object $cm Course module object
+     * @param int $userid User ID
+     * @return bool True if user has submitted
+     */
+    protected function has_user_submission($cm, $userid) {
+        global $DB;
+        
+        $modulename = $DB->get_field('modules', 'name', ['id' => $cm->module]);
+        
+        if (!$modulename) {
+            return false;
+        }
+        
+        $tables = [
+            'assign' => 'assign_submission',
+            'quiz' => 'quiz_attempts',
+            'forum' => 'forum_posts',
+            'workshop' => 'workshop_submissions',
+            'choice' => 'choice_answers',
+            'feedback' => 'feedback_completed',
+            'survey' => 'survey_answers',
+            'lesson' => 'lesson_attempts',
+            'scorm' => 'scorm_scoes_track',
+            'data' => 'data_records',
+            'glossary' => 'glossary_entries',
+            'wiki' => 'wiki_pages',
+            'chat' => 'chat_messages',
+            'h5pactivity' => 'h5pactivity_attempts'
+        ];
+        
+        if (!isset($tables[$modulename])) {
+            return false;
+        }
+        
+        $table = $tables[$modulename];
+        
+        switch ($modulename) {
+            case 'assign':
+                return $DB->record_exists($table, ['assignment' => $cm->instance, 'userid' => $userid]);
+            case 'quiz':
+                return $DB->record_exists($table, ['quiz' => $cm->instance, 'userid' => $userid]);
+            case 'forum':
+                $sql = "SELECT COUNT(fp.id)
+                        FROM {forum_posts} fp
+                        JOIN {forum_discussions} fd ON fd.id = fp.discussion
+                        WHERE fd.forum = :forum AND fp.userid = :userid";
+                return $DB->count_records_sql($sql, ['forum' => $cm->instance, 'userid' => $userid]) > 0;
+            case 'workshop':
+                return $DB->record_exists($table, ['workshopid' => $cm->instance, 'authorid' => $userid]);
+            case 'choice':
+                return $DB->record_exists($table, ['choiceid' => $cm->instance, 'userid' => $userid]);
+            case 'feedback':
+                return $DB->record_exists($table, ['feedback' => $cm->instance, 'userid' => $userid]);
+            case 'survey':
+                return $DB->record_exists($table, ['survey' => $cm->instance, 'userid' => $userid]);
+            case 'lesson':
+                return $DB->record_exists($table, ['lessonid' => $cm->instance, 'userid' => $userid]);
+            case 'scorm':
+                $sql = "SELECT COUNT(sst.id)
+                        FROM {scorm_scoes_track} sst
+                        JOIN {scorm_scoes} ss ON ss.id = sst.scoid
+                        WHERE ss.scorm = :scorm AND sst.userid = :userid";
+                return $DB->count_records_sql($sql, ['scorm' => $cm->instance, 'userid' => $userid]) > 0;
+            case 'data':
+                return $DB->record_exists($table, ['dataid' => $cm->instance, 'userid' => $userid]);
+            case 'glossary':
+                return $DB->record_exists($table, ['glossaryid' => $cm->instance, 'userid' => $userid]);
+            case 'wiki':
+                $sql = "SELECT COUNT(wp.id)
+                        FROM {wiki_pages} wp
+                        JOIN {wiki_subwikis} ws ON ws.id = wp.subwikiid
+                        WHERE ws.wikiid = :wiki AND wp.userid = :userid";
+                return $DB->count_records_sql($sql, ['wiki' => $cm->instance, 'userid' => $userid]) > 0;
+            case 'chat':
+                return $DB->record_exists($table, ['chatid' => $cm->instance, 'userid' => $userid]);
+            case 'h5pactivity':
+                return $DB->record_exists($table, ['h5pactivityid' => $cm->instance, 'userid' => $userid]);
+            default:
+                return false;
+        }
     }
     
     /**

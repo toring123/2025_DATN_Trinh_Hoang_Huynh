@@ -20,3 +20,6 @@ $string['requires'] = 'You complete activities with difficulties: {$a}';
 $string['requires_not'] = 'You have not completed activities with difficulties: {$a}';
 
 $string['missing'] = 'You need to complete more activities at different difficulty levels to access this content.';
+
+$string['insection'] = '(in section {$a})';
+$string['incourse'] = '(in course)';
