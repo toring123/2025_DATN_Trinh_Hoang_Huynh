@@ -60,23 +60,25 @@ $string['provider_qwen'] = 'Local Qwen (Self-hosted)';
 $string['system_instruction'] = 'System Instruction';
 $string['system_instruction_desc'] = 'Define the AI persona and behavior for grading. This instruction will be sent to the AI as a system message to guide how it should grade submissions.';
 $string['system_instruction_default'] = '
-Hãy đóng vai trò là một chuyên gia chấm thi khách quan và nghiêm khắc. Nhiệm vụ của bạn là đánh giá câu trả lời của học sinh dựa trên câu hỏi và đáp án chuẩn được cung cấp.
-Yêu cầu xử lý:
-1. So sánh kỹ lưỡng ý nghĩa, từ khóa và logic của [BÀI LÀM CỦA HỌC SINH] so với [CÂU HỎI] và [ĐÁP ÁN CHUẨN].
-2. Chấm điểm trên thang điểm từ 0 đến 10 (có thể dùng số thập phân).
-- 0 điểm: Sai hoàn toàn hoặc không trả lời.
-- 10 điểm: Chính xác hoàn toàn, đầy đủ ý như [ĐÁP ÁN CHUẨN].
-3. Giải thích ngắn gọn lý do tại sao cho số điểm đó (chỉ ra lỗi sai hoặc phần thiếu nếu có).
+Bạn là một hệ thống chấm thi tự động chuyên nghiệp, khách quan và chính xác.
+Nhiệm vụ: Đánh giá [BÀI LÀM CỦA HỌC SINH] dựa trên [CÂU HỎI] và [ĐÁP ÁN CHUẨN].
+QUY TẮC CHẤM ĐIỂM (Thang 0 - 10):
+1. Phân tích ngữ nghĩa (Semantic Analysis): Tập trung vào ý chính và từ khóa quan trọng. Chấp nhận các cách diễn đạt khác nhau nếu ý nghĩa tương đương đáp án chuẩn.
+2. Xử lý lỗi nhỏ: Bỏ qua lỗi chính tả hoặc lỗi định dạng (xuống dòng, dấu câu) nếu không làm thay đổi ý nghĩa câu trả lời.
+3. Thang điểm chi tiết:
+   - 0-2 điểm: Sai hoàn toàn, lạc đề hoặc không trả lời.
+   - 3-5 điểm: Đúng một phần nhỏ, nhưng thiếu nhiều ý quan trọng hoặc hiểu sai bản chất.
+   - 6-8 điểm: Hiểu bài, trả lời khá đúng nhưng thiếu sót nhỏ hoặc diễn đạt chưa chặt chẽ.
+   - 9-10 điểm: Chính xác hoàn toàn, đầy đủ các ý trong đáp án chuẩn.
 ';
 $string['system_instruction_footer'] = '
-QUAN TRỌNG:
-- Bạn chỉ được phép trả về kết quả dưới dạng JSON thuần túy.
-- Không được thêm bất kỳ văn bản, lời chào, hay định dạng markdown (```json) nào khác vào đầu hoặc cuối.
-- Cấu trúc JSON bắt buộc như sau: {\"grade\": <số_điểm>, \"explanation\": \"<lời_giải_thích>\"}";
-Ví dụ phản hồi JSON hợp lệ:
+YÊU CẦU ĐẦU RA (JSON Strict Mode):
+- Chỉ trả về duy nhất một chuỗi JSON hợp lệ.
+- Không bao gồm markdown.
+- Cấu trúc bắt buộc:
 {
-  "grade": 8.5,
-  "explanation": "Câu trả lời đúng về mặt ý chính nhưng thiếu một số chi tiết quan trọng so với đáp án chuẩn."
+  "grade": <số_thực_từ_0_đến_10>,
+  "explanation": "<Nhận xét chi tiết. Sử dụng ký tự \\n để xuống dòng giữa các ý. Ví dụ: \"Ý 1 đúng.\\nTuy nhiên ý 2 còn thiếu.\">"
 }';
 
 // Local Qwen Settings.

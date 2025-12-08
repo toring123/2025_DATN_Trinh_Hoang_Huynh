@@ -650,10 +650,11 @@ class grade_submission_task extends \core\task\adhoc_task {
                 ],
             ],
             'generationConfig' => [
-                'temperature' => 0.1,
+                'temperature' => 0.3,
                 'topK' => 40,
                 'topP' => 0.95,
                 'maxOutputTokens' => 8192,
+                'response_mime_type' => 'application/json',
             ],
         ];
 
@@ -762,8 +763,8 @@ class grade_submission_task extends \core\task\adhoc_task {
                 ['role' => 'system', 'content' => $systemInstruction],
                 ['role' => 'user', 'content' => $userContent],
             ],
-            'temperature' => 0.2,
-            'max_tokens' => 500,
+            'temperature' => 0.3,
+            'max_tokens' => 8192,
         ];
 
         mtrace("[AUTOGRADING TASK] payload " . json_encode($payload, JSON_UNESCAPED_UNICODE));
@@ -893,10 +894,9 @@ class grade_submission_task extends \core\task\adhoc_task {
 [BÀI LÀM CỦA HỌC SINH]:
 (Vui lòng xem các hình ảnh bài làm viết tay được đính kèm trong request này)
 
-[YÊU CẦU CHẤM ĐIỂM]:
+[YÊU CẦU XỬ LÝ ẢNH]:
 1. Hãy quan sát kỹ các hình ảnh, trích xuất nội dung chữ viết tay của học sinh.
 2. Nếu có nhiều ảnh, hãy tự động ghép nối nội dung theo thứ tự hợp lý.
-3. So sánh nội dung đó với [CÂU HỎI] và [ĐÁP ÁN CHUẨN] để chấm điểm và đưa ra nhận xét chi tiết.
 EOT;
     }
 

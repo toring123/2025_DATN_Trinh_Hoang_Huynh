@@ -31,6 +31,7 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
     $currentvalue = 0;
     $currentanswer = '';
     $draftitemid = 0;
+    $textdraftitemid = 0;
 
     // Load existing value if editing.
     if ($cmid !== null && $cmid > 0) {
@@ -38,6 +39,19 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
         if ($record !== false) {
             $currentvalue = (int)$record->autograding_option;
             $currentanswer = $record->answer ?? '';
+        }
+
+        // Prepare file area for text editor (if option 2).
+        if ($currentvalue === 2) {
+            $textdraftitemid = file_get_submitted_draft_itemid('autograding_text_answer');
+            file_prepare_draft_area(
+                $textdraftitemid,
+                context_system::instance()->id,
+                'local_autograding',
+                'text_answer',
+                $cmid,
+                ['subdirs' => 0, 'maxfiles' => 10, 'maxbytes' => 10485760]
+            );
         }
 
         // Prepare file area for editing (if option 3).
@@ -83,21 +97,35 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
     $mform->setType('autograding_option', PARAM_INT);
 
     // Add text answer field (conditional - for option 2).
+    $editoroptions = [
+        'subdirs' => 0,
+        'maxbytes' => 10485760, // 10MB max.
+        'maxfiles' => 10,
+        'context' => context_system::instance(),
+    ];
+
     $mform->addElement(
-        'textarea',
+        'editor',
         'autograding_text_answer',
         get_string('text_answer_label', 'local_autograding'),
-        ['rows' => 5, 'cols' => 60]
+        ['rows' => 10],
+        $editoroptions
     );
 
     // Add help button for text answer.
     $mform->addHelpButton('autograding_text_answer', 'text_answer_label', 'local_autograding');
 
-    // Set type.
-    $mform->setType('autograding_text_answer', PARAM_TEXT);
+    // Set type for editor.
+    $mform->setType('autograding_text_answer', PARAM_RAW);
 
     // Set default value if editing.
-    $mform->setDefault('autograding_text_answer', $currentanswer);
+    if ($cmid !== null && $cmid > 0 && $currentvalue === 2) {
+        $mform->setDefault('autograding_text_answer', [
+            'text' => $currentanswer,
+            'format' => FORMAT_HTML,
+            'itemid' => $textdraftitemid
+        ]);
+    }
 
     // Hide this field unless option 2 is selected.
     $mform->hideIf('autograding_text_answer', 'autograding_option', 'neq', 2);
@@ -170,8 +198,18 @@ function local_autograding_coursemodule_validation(...$args): array {
 
     // Validate option 2: Text answer required.
     if ($autogradingoption === 2) {
-        $textanswer = $data['autograding_text_answer'] ?? '';
-        $textanswer = trim($textanswer);
+        $textanswer = '';
+        
+        // Editor field returns array with 'text' key.
+        if (isset($data['autograding_text_answer'])) {
+            if (is_array($data['autograding_text_answer'])) {
+                $textanswer = $data['autograding_text_answer']['text'] ?? '';
+            } else {
+                $textanswer = $data['autograding_text_answer'];
+            }
+        }
+        
+        $textanswer = trim(strip_tags($textanswer));
 
         if (empty($textanswer)) {
             $errors['autograding_text_answer'] = get_string('text_answer_required', 'local_autograding');
@@ -252,10 +290,34 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
     $answertext = null;
 
     if ($autogradingoption === 2) {
-        // error_log("[AUTOGRADING] Processing option 2: text answer");
-        // Option 2: Text answer.
+        // error_log("[AUTOGRADING] Processing option 2: text answer (editor)");
+        // Option 2: Text answer from editor.
         if (isset($data->autograding_text_answer)) {
-            $answertext = trim($data->autograding_text_answer);
+            $editordata = $data->autograding_text_answer;
+            
+            // Editor field returns array with 'text', 'format', and 'itemid'.
+            if (is_array($editordata)) {
+                $answertext = $editordata['text'] ?? '';
+                $draftitemid = $editordata['itemid'] ?? 0;
+                
+                // Save files from editor to permanent storage.
+                if ($draftitemid > 0) {
+                    $context = context_system::instance();
+                    file_save_draft_area_files(
+                        $draftitemid,
+                        $context->id,
+                        'local_autograding',
+                        'text_answer',
+                        $cmid,
+                        ['subdirs' => 0, 'maxfiles' => 10, 'maxbytes' => 10485760]
+                    );
+                }
+            } else {
+                // Fallback for non-editor format.
+                $answertext = $editordata;
+            }
+            
+            $answertext = trim($answertext);
             // error_log("[AUTOGRADING] Text answer length: " . strlen($answertext));
             if (empty($answertext)) {
                 $answertext = null;
