@@ -1,4 +1,4 @@
 moodle/mariadb-latest.tar
 moodle/moodle-5.0.tar
-autograding/vendor/
+local/autograding/vendor/
 mô tả.csv
