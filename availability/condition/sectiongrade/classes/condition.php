@@ -49,7 +49,7 @@ class condition extends \core_availability\condition {
      * Hàm lọc danh sách user đã được tối ưu hiệu năng (Bulk processing)
      * Chỉ tính trung bình các bài user NHÌN THẤY ĐƯỢC và ĐÃ ĐƯỢC CHẤM ĐIỂM
      */
-    public function filter_user_list(array $users, $not, \core_availability\info $info, $checker) {
+    public function filter_user_list(array $users, $not, \core_availability\info $info, ?\core_availability\capability_checker $checker = null) {
         global $DB;
 
         if (empty($users)) {
@@ -63,25 +63,27 @@ class condition extends \core_availability\condition {
         $result = [];
         
         foreach ($users as $userid => $user) {
-            // Lấy modinfo cho user này để check uservisible
-            $modinfo = get_fast_modinfo($course, $userid);
-            
-            // Tìm các CM IDs mà user này nhìn thấy được trong section
+            // Cache per-user modinfo to avoid repeated loads if same user appears
+            static $modinfoCache = [];
+            if (!isset($modinfoCache[$userid])) {
+                $modinfoCache[$userid] = get_fast_modinfo($course, $userid);
+            }
+            $modinfo = $modinfoCache[$userid];
+
             $visibleCmIds = [];
             foreach ($modinfo->get_cms() as $cm) {
                 if ($cm->sectionnum == $this->sectionnumber && $cm->uservisible) {
                     $visibleCmIds[] = $cm->id;
                 }
             }
-            
+
             $average = 0;
-            
+
             if (!empty($visibleCmIds)) {
-                // Query grades chỉ cho các activities mà user nhìn thấy
                 list($insql, $params) = $DB->get_in_or_equal($visibleCmIds, SQL_PARAMS_NAMED);
                 $params['userid'] = $userid;
                 $params['courseid'] = $course->id;
-                
+
                 $sql = "SELECT SUM(gg.finalgrade - gi.grademin) as total_achieved,
                                SUM(gi.grademax - gi.grademin) as total_max
                         FROM {course_modules} cm
@@ -94,20 +96,19 @@ class condition extends \core_availability\condition {
                         WHERE cm.id $insql
                           AND gg.finalgrade IS NOT NULL
                           AND gi.grademax > gi.grademin";
-                
+
                 $grade = $DB->get_record_sql($sql, $params);
-                
+
                 if ($grade && $grade->total_max > 0) {
                     $average = ($grade->total_achieved / $grade->total_max) * 100;
                 }
             }
-            
-            // Check điều kiện
+
             $allow = ($average >= $this->mingrade);
             if ($not) {
                 $allow = !$allow;
             }
-            
+
             if ($allow) {
                 $result[$userid] = $user;
             }
