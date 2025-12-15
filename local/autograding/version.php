@@ -5,8 +5,7 @@ declare(strict_types=1);
  * Version information for local_autograding plugin.
  *
  * @package    local_autograding
- * @copyright  2025 Your Name
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright  2025 Nguyen Huu Trinh
  */
 
 defined('MOODLE_INTERNAL') || die();

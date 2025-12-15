@@ -5,8 +5,7 @@ declare(strict_types=1);
  * Admin settings for local_autograding plugin.
  *
  * @package    local_autograding
- * @copyright  2025 Your Name
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright  2025 Nguyen Huu Trinh
  */
 
 defined('MOODLE_INTERNAL') || die();
@@ -98,6 +97,21 @@ if ($hassiteconfig) {
         get_string('qwen_model', 'local_autograding'),
         get_string('qwen_model_desc', 'local_autograding'),
         'qwen2.5-3b-instruct'
+    ));
+
+    // Add OCR Server section header.
+    $settings->add(new admin_setting_heading(
+        'local_autograding/ocr_header',
+        get_string('ocr_settings_header', 'local_autograding'),
+        get_string('ocr_settings_desc', 'local_autograding')
+    ));
+
+    // Add OCR Server URL setting.
+    $settings->add(new admin_setting_configtext(
+        'local_autograding/ocr_server_url',
+        get_string('ocr_server_url', 'local_autograding'),
+        get_string('ocr_server_url_desc', 'local_autograding'),
+        'http://127.0.0.1:8001'
     ));
 
     // Add the settings page to the local plugins category.

@@ -5,8 +5,7 @@ declare(strict_types=1);
  * Event observer class for local_autograding plugin.
  *
  * @package    local_autograding
- * @copyright  2025 Your Name
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright  2025 Nguyen Huu Trinh
  */
 
 namespace local_autograding;
@@ -21,7 +20,8 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Event observer class.
  */
-class observer {
+class observer
+{
 
     /**
      * Handle course module created event.
@@ -29,13 +29,14 @@ class observer {
      * @param course_module_created $event The event
      * @return void
      */
-    public static function course_module_created(course_module_created $event): void {
+    public static function course_module_created(course_module_created $event): void
+    {
         // Only process assign modules.
         if ($event->other['modulename'] !== 'assign') {
             return;
         }
 
-        $cmid = (int)$event->objectid;
+        $cmid = (int) $event->objectid;
         if ($cmid <= 0) {
             return;
         }
@@ -51,13 +52,14 @@ class observer {
      * @param course_module_updated $event The event
      * @return void
      */
-    public static function course_module_updated(course_module_updated $event): void {
+    public static function course_module_updated(course_module_updated $event): void
+    {
         // Only process assign modules.
         if ($event->other['modulename'] !== 'assign') {
             return;
         }
 
-        $cmid = (int)$event->objectid;
+        $cmid = (int) $event->objectid;
         if ($cmid <= 0) {
             return;
         }
@@ -73,7 +75,8 @@ class observer {
      * @param int $cmid Course module ID
      * @return void
      */
-    private static function save_from_request(int $cmid): void {
+    private static function save_from_request(int $cmid): void
+    {
         // Get the autograding option from the form data.
         $autogradingoption = optional_param('autograding_option', null, PARAM_INT);
 
@@ -86,7 +89,7 @@ class observer {
         if ($autogradingoption === 2) {
             $textanswer = optional_param('autograding_text_answer', '', PARAM_TEXT);
             $textanswer = trim($textanswer);
-            
+
             // Ensure it's not empty for option 2.
             if (empty($textanswer)) {
                 $textanswer = null;
@@ -107,7 +110,8 @@ class observer {
      * @param course_module_deleted $event The event
      * @return void
      */
-    public static function course_module_deleted(course_module_deleted $event): void {
+    public static function course_module_deleted(course_module_deleted $event): void
+    {
         // Only process assign modules.
         if ($event->other['modulename'] !== 'assign') {
             return;
@@ -131,7 +135,8 @@ class observer {
      * @param assessable_submitted $event The event
      * @return void
      */
-    public static function assessable_submitted(assessable_submitted $event): void {
+    public static function assessable_submitted(assessable_submitted $event): void
+    {
         global $DB, $CFG;
 
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
@@ -142,7 +147,7 @@ class observer {
 
         try {
             $contextid = $event->contextid;
-            $userid = (int)$event->userid;
+            $userid = (int) $event->userid;
 
             error_log("[AUTOGRADING] Context ID: " . $contextid);
             error_log("[AUTOGRADING] User ID: " . $userid);
@@ -154,7 +159,7 @@ class observer {
                 return;
             }
 
-            $cmid = (int)$context->instanceid;
+            $cmid = (int) $context->instanceid;
             $cm = get_coursemodule_from_id('assign', $cmid, 0, false, IGNORE_MISSING);
 
             if (!$cm) {
@@ -167,7 +172,7 @@ class observer {
 
             // Quick check: Is autograding enabled for this assignment?
             $autogradingconfig = $DB->get_record('local_autograding', ['cmid' => $cmid]);
-            if (!$autogradingconfig || (int)$autogradingconfig->autograding_option === 0) {
+            if (!$autogradingconfig || (int) $autogradingconfig->autograding_option === 0) {
                 error_log("[AUTOGRADING] Autograding not enabled for this assignment (cmid: $cmid)");
                 return;
             }
@@ -187,14 +192,14 @@ class observer {
                 return;
             }
 
-            $submissionid = (int)$submission->id;
+            $submissionid = (int) $submission->id;
             error_log("[AUTOGRADING] Submission ID (from DB): " . $submissionid);
 
             // Deduplication: Check if a task for this submission already exists in the queue.
             $existingtasks = \core\task\manager::get_adhoc_tasks('\\local_autograding\\task\\grade_submission_task');
             foreach ($existingtasks as $existingtask) {
                 $existingdata = $existingtask->get_custom_data();
-                if (isset($existingdata->submissionid) && (int)$existingdata->submissionid === $submissionid) {
+                if (isset($existingdata->submissionid) && (int) $existingdata->submissionid === $submissionid) {
                     error_log("[AUTOGRADING] Task already queued for submission {$submissionid}, skipping duplicate");
                     return;
                 }

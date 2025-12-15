@@ -5,8 +5,7 @@ declare(strict_types=1);
  * Adhoc task for asynchronous auto-grading of assignment submissions.
  *
  * @package    local_autograding
- * @copyright  2025 Your Name
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright  2025 Nguyen Huu Trinh
  */
 
 namespace local_autograding\task;
@@ -20,14 +19,16 @@ defined('MOODLE_INTERNAL') || die();
  * It handles the heavy lifting of calling the Gemini API and saving the grade
  * asynchronously, preventing browser hangs and managing API rate limits.
  */
-class grade_submission_task extends \core\task\adhoc_task {
+class grade_submission_task extends \core\task\adhoc_task
+{
 
     /**
      * Get the name of the task.
      *
      * @return string
      */
-    public function get_name(): string {
+    public function get_name(): string
+    {
         return get_string('task_grade_submission', 'local_autograding');
     }
 
@@ -41,22 +42,23 @@ class grade_submission_task extends \core\task\adhoc_task {
      * @return void
      * @throws \moodle_exception If the task should be retried later.
      */
-    public function execute(): void {
+    public function execute(): void
+    {
         global $DB, $CFG;
 
         $data = $this->get_custom_data();
 
         // Validate required data - cast to int first, then validate they're positive.
-        $cmid = (int)($data->cmid ?? 0);
-        $userid = (int)($data->userid ?? 0);
-        $contextid = (int)($data->contextid ?? 0);
+        $cmid = (int) ($data->cmid ?? 0);
+        $userid = (int) ($data->userid ?? 0);
+        $contextid = (int) ($data->contextid ?? 0);
 
         if ($cmid <= 0 || $userid <= 0 || $contextid <= 0) {
             mtrace("[AUTOGRADING TASK] ERROR: Missing or invalid required data (cmid: {$cmid}, userid: {$userid}, contextid: {$contextid})");
             return; // Don't retry - data is invalid.
         }
 
-        $submissionid = isset($data->submissionid) ? (int)$data->submissionid : null;
+        $submissionid = isset($data->submissionid) ? (int) $data->submissionid : null;
         // If submissionid is provided but invalid (0), treat as null.
         if ($submissionid !== null && $submissionid <= 0) {
             $submissionid = null;
@@ -74,7 +76,7 @@ class grade_submission_task extends \core\task\adhoc_task {
 
             // Step 2: Check if autograding is still enabled for this assignment.
             $autogradingconfig = $DB->get_record('local_autograding', ['cmid' => $cmid]);
-            if (!$autogradingconfig || (int)$autogradingconfig->autograding_option === 0) {
+            if (!$autogradingconfig || (int) $autogradingconfig->autograding_option === 0) {
                 mtrace("[AUTOGRADING TASK] Autograding not enabled for cmid: {$cmid}");
                 return; // Don't retry - autograding was disabled.
             }
@@ -105,7 +107,7 @@ class grade_submission_task extends \core\task\adhoc_task {
             }
             // Step 5: Get reference answer.
             $referenceAnswer = $autogradingconfig->answer ?? '';
-            $autogradingoption = (int)$autogradingconfig->autograding_option;
+            $autogradingoption = (int) $autogradingconfig->autograding_option;
 
             // For options 2 and 3, reference answer is required.
             if (($autogradingoption === 2 || $autogradingoption === 3) && empty($referenceAnswer)) {
@@ -113,22 +115,15 @@ class grade_submission_task extends \core\task\adhoc_task {
                 return; // Don't retry - configuration error.
             }
 
-            // Step 6: Get student submission data (text and images).
-            $submissionData = $this->get_submission_data((int)$cm->instance, $userid, $submissionid);
-            $studentResponse = $submissionData['text'];
-            $imageParts = $submissionData['images'];
+            // Step 6: Get student submission text (including OCR-extracted text from images/PDFs).
+            $studentResponse = $this->get_student_submission_text((int) $cm->instance, $userid, $submissionid);
 
-            // Check if we have any content to grade.
-            $hasText = !empty($studentResponse);
-            $hasImages = !empty($imageParts);
-
-            if (!$hasText && !$hasImages) {
+            if (empty($studentResponse)) {
                 mtrace("[AUTOGRADING TASK] No student submission content found for user {$userid}");
                 return; // Don't retry - no submission to grade.
             }
 
-            mtrace("[AUTOGRADING TASK] Student response: text=" . ($hasText ? strlen($studentResponse) . " chars" : "none") .
-                   ", images=" . count($imageParts));
+            mtrace("[AUTOGRADING TASK] Student response: " . strlen($studentResponse) . " chars");
 
             // Step 7: Get AI provider configuration.
             $provider = get_config('local_autograding', 'ai_provider') ?: 'gemini';
@@ -141,9 +136,8 @@ class grade_submission_task extends \core\task\adhoc_task {
                 $provider,
                 $question,
                 $referenceAnswer,
-                $studentResponse ?? '',
-                $autogradingoption,
-                $imageParts
+                $studentResponse,
+                $autogradingoption
             );
 
             if ($gradingResult === null) {
@@ -176,7 +170,8 @@ class grade_submission_task extends \core\task\adhoc_task {
      * @param int|null $submissionid Submission ID
      * @return string|null The submission text or null if not found
      */
-    private function get_student_submission_text(int $assignid, int $userid, ?int $submissionid): ?string {
+    private function get_student_submission_text(int $assignid, int $userid, ?int $submissionid): ?string
+    {
         global $DB, $CFG;
 
         // Get the latest submission if submissionid not provided.
@@ -223,13 +218,17 @@ class grade_submission_task extends \core\task\adhoc_task {
     }
 
     /**
-     * Extract text from submission files (PDF or DOCX).
+     * Extract text from submission files (PDF, DOCX, images).
+     *
+     * If the OCR server is configured, it will be used for PDFs and images.
+     * Otherwise, falls back to local PDF parser and ignores images.
      *
      * @param object $submission The submission record
      * @param int $assignid Assignment ID
      * @return string Extracted text
      */
-    private function extract_text_from_submission_files(object $submission, int $assignid): string {
+    private function extract_text_from_submission_files(object $submission, int $assignid): string
+    {
         global $CFG;
 
         $fs = get_file_storage();
@@ -246,16 +245,25 @@ class grade_submission_task extends \core\task\adhoc_task {
         );
 
         $extractedText = [];
+        $ocrServerUrl = get_config('local_autograding', 'ocr_server_url');
+        $ocrEnabled = !empty($ocrServerUrl);
 
         foreach ($files as $file) {
             $filename = $file->get_filename();
             $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            $mimeType = $file->get_mimetype();
 
             try {
                 if ($extension === 'pdf') {
-                    $text = $this->extract_pdf_text($file);
-                    if (!empty($text)) {
-                        $extractedText[] = $text;
+                    // Use OCR server for PDF.
+                    if ($ocrEnabled) {
+                        mtrace("[AUTOGRADING TASK] Using OCR server for PDF: {$filename}");
+                        $text = $this->call_ocr_api($file, 'pdf');
+                        if (!empty($text)) {
+                            $extractedText[] = $text;
+                        }
+                    } else {
+                        mtrace("[AUTOGRADING TASK] OCR server not configured, skipping PDF: {$filename}");
                     }
                 } else if ($extension === 'docx') {
                     $text = $this->extract_docx_text($file);
@@ -267,8 +275,14 @@ class grade_submission_task extends \core\task\adhoc_task {
                     if (!empty($text)) {
                         $extractedText[] = trim($text);
                     }
+                } else if ($ocrEnabled && in_array($mimeType, self::SUPPORTED_IMAGE_MIMETYPES, true)) {
+                    // Use OCR server for images.
+                    mtrace("[AUTOGRADING TASK] Using OCR server for image: {$filename}");
+                    $text = $this->call_ocr_api($file, 'image');
+                    if (!empty($text)) {
+                        $extractedText[] = $text;
+                    }
                 }
-                // Note: Image files are handled separately by extract_images_from_submission_files()
             } catch (\Exception $e) {
                 mtrace("[AUTOGRADING TASK] Error extracting text from file {$filename}: " . $e->getMessage());
             }
@@ -278,7 +292,7 @@ class grade_submission_task extends \core\task\adhoc_task {
     }
 
     /**
-     * Supported image MIME types for Gemini Vision API.
+     * Supported image MIME types for OCR text extraction.
      */
     private const SUPPORTED_IMAGE_MIMETYPES = [
         'image/jpeg',
@@ -288,197 +302,121 @@ class grade_submission_task extends \core\task\adhoc_task {
     ];
 
     /**
-     * Extract images from submission files for vision-based grading.
+     * Call the OCR server to extract text from a file.
      *
-     * This method retrieves all image files from the submission, converts them
-     * to Base64, and returns them in a format suitable for the Gemini Vision API.
+     * This method sends files to an external OCR server for text extraction.
+     * Supports both image files (via /ocr endpoint) and PDF files (via /ocr-pdf endpoint).
      *
-     * @param object $submission The submission record
-     * @param int $assignid Assignment ID
-     * @return array Array of image parts with 'mimeType' and 'data' (Base64)
+     * @param \stored_file $file The file to extract text from
+     * @param string $type The file type: 'image' or 'pdf'
+     * @return string|null Extracted text, or null on error
      */
-    private function extract_images_from_submission_files(object $submission, int $assignid): array {
-        $fs = get_file_storage();
-        $cm = get_coursemodule_from_instance('assign', $assignid, 0, false, MUST_EXIST);
-        $context = \context_module::instance($cm->id);
+    private function call_ocr_api(\stored_file $file, string $type): ?string
+    {
+        $ocrServerUrl = get_config('local_autograding', 'ocr_server_url');
 
-        $files = $fs->get_area_files(
-            $context->id,
-            'assignsubmission_file',
-            'submission_files',
-            $submission->id,
-            'id',
-            false // Exclude directories
-        );
-
-        $imageParts = [];
-
-        foreach ($files as $file) {
-            // Skip directories and empty files.
-            if ($file->is_directory() || $file->get_filesize() === 0) {
-                continue;
-            }
-
-            $mimeType = $file->get_mimetype();
-            $filename = $file->get_filename();
-
-            // Check if the file is a supported image type.
-            if (!in_array($mimeType, self::SUPPORTED_IMAGE_MIMETYPES, true)) {
-                continue;
-            }
-
-            try {
-                // Read file content and convert to Base64.
-                $content = $file->get_content();
-                if (empty($content)) {
-                    mtrace("[AUTOGRADING TASK] Image file {$filename} is empty, skipping");
-                    continue;
-                }
-
-                $base64Data = base64_encode($content);
-
-                $imageParts[] = [
-                    'mimeType' => $mimeType,
-                    'data' => $base64Data,
-                    'filename' => $filename, // For logging purposes
-                ];
-
-                mtrace("[AUTOGRADING TASK] Extracted image: {$filename} ({$mimeType}, " . strlen($content) . " bytes)");
-
-            } catch (\Exception $e) {
-                mtrace("[AUTOGRADING TASK] Error extracting image {$filename}: " . $e->getMessage());
-            }
+        if (empty($ocrServerUrl)) {
+            mtrace("[AUTOGRADING TASK] OCR server URL not configured");
+            return null;
         }
 
-        mtrace("[AUTOGRADING TASK] Total images extracted: " . count($imageParts));
+        // Determine endpoint based on file type.
+        $endpoint = ($type === 'pdf') ? '/ocr-pdf' : '/ocr';
+        $url = rtrim($ocrServerUrl, '/') . $endpoint;
 
-        return $imageParts;
-    }
-
-    /**
-     * Get submission data including both text and images.
-     *
-     * @param int $assignid Assignment ID
-     * @param int $userid User ID
-     * @param int|null $submissionid Submission ID
-     * @return array{text: string|null, images: array} Array with 'text' and 'images' keys
-     */
-    private function get_submission_data(int $assignid, int $userid, ?int $submissionid): array {
-        global $DB;
-
-        $result = [
-            'text' => null,
-            'images' => [],
-        ];
-
-        // Get the submission record.
-        if ($submissionid === null) {
-            $submission = $DB->get_record('assign_submission', [
-                'assignment' => $assignid,
-                'userid' => $userid,
-                'latest' => 1,
-            ]);
-        } else {
-            $submission = $DB->get_record('assign_submission', ['id' => $submissionid]);
-        }
-
-        if (!$submission) {
-            return $result;
-        }
-
-        // Get text submission.
-        $result['text'] = $this->get_student_submission_text($assignid, $userid, $submissionid);
-
-        // Get image submissions.
-        $filesubmission = $DB->get_record('assignsubmission_file', [
-            'assignment' => $assignid,
-            'submission' => $submission->id,
-        ]);
-
-        if ($filesubmission && $filesubmission->numfiles > 0) {
-            $result['images'] = $this->extract_images_from_submission_files($submission, $assignid);
-        }
-
-        return $result;
-    }
-
-    /**
-     * Extract text from a PDF file.
-     *
-     * @param \stored_file $file The stored file
-     * @return string Extracted text
-     */
-    private function extract_pdf_text(\stored_file $file): string {
-        global $CFG;
-
-        $autoloadpath = $CFG->dirroot . '/local/autograding/vendor/autoload.php';
-        if (!file_exists($autoloadpath)) {
-            throw new \Exception('PDF parser not installed');
-        }
-
-        require_once($autoloadpath);
-
+        $filename = $file->get_filename();
         $content = $file->get_content();
+
         if (empty($content)) {
-            return '';
+            mtrace("[AUTOGRADING TASK] File {$filename} is empty, skipping OCR");
+            return null;
         }
 
-        $parser = new \Smalot\PdfParser\Parser();
-        $pdf = $parser->parseContent($content);
+        mtrace("[AUTOGRADING TASK] Sending file to OCR server: {$filename} via {$endpoint}");
 
-        return trim($pdf->getText());
-    }
-
-    /**
-     * Extract text from a DOCX file.
-     *
-     * @param \stored_file $file The stored file
-     * @return string Extracted text
-     */
-    private function extract_docx_text(\stored_file $file): string {
-        global $CFG;
-
-        // Check if phpoffice/phpword is available.
-        $autoloadpath = $CFG->dirroot . '/local/autograding/vendor/autoload.php';
-        if (!file_exists($autoloadpath)) {
-            throw new \Exception('Document parser not installed');
-        }
-
-        require_once($autoloadpath);
-
-        // Check if PhpWord is available.
-        if (!class_exists('\PhpOffice\PhpWord\IOFactory')) {
-            // Fallback: basic DOCX text extraction without PhpWord.
-            return $this->extract_docx_text_basic($file);
-        }
-
-        // Create temp file for PhpWord.
-        $tempfile = tempnam(sys_get_temp_dir(), 'docx_');
-        file_put_contents($tempfile, $file->get_content());
-
+        $tempFile = null;
         try {
-            $phpWord = \PhpOffice\PhpWord\IOFactory::load($tempfile);
-            $text = '';
+            // Create a temporary file for curl upload.
+            $tempFile = tempnam(sys_get_temp_dir(), 'ocr_');
+            file_put_contents($tempFile, $content);
 
-            foreach ($phpWord->getSections() as $section) {
-                foreach ($section->getElements() as $element) {
-                    $text .= $this->extract_element_text($element) . "\n";
-                }
+            // Use curl for multipart/form-data upload.
+            $ch = curl_init();
+
+            if ($type === 'pdf') {
+                // For PDF endpoint, use 'file' as field name.
+                $postFields = [
+                    'file' => new \CURLFile($tempFile, $file->get_mimetype(), $filename),
+                ];
+            } else {
+                // For image endpoint, use 'files[0]' as field name.
+                $postFields = [
+                    'files[0]' => new \CURLFile($tempFile, $file->get_mimetype(), $filename),
+                ];
             }
 
-            return trim($text);
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $postFields,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 120,
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                ],
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+
+            curl_close($ch);
+
+            if ($curlError) {
+                mtrace("[AUTOGRADING TASK] OCR API curl error: {$curlError}");
+                return null;
+            }
+
+            if ($httpCode !== 200) {
+                mtrace("[AUTOGRADING TASK] OCR API returned HTTP {$httpCode}: " . substr($response, 0, 500));
+                return null;
+            }
+
+            $responseData = json_decode($response, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                mtrace("[AUTOGRADING TASK] OCR API JSON decode error: " . json_last_error_msg());
+                return null;
+            }
+
+            $extractedText = $responseData['text'] ?? '';
+
+            if (!empty($extractedText)) {
+                mtrace("[AUTOGRADING TASK] OCR extracted " . strlen($extractedText) . " characters from {$filename}");
+            } else {
+                mtrace("[AUTOGRADING TASK] OCR returned empty text for {$filename}");
+            }
+
+            return $extractedText;
+
+        } catch (\Exception $e) {
+            mtrace("[AUTOGRADING TASK] OCR API exception: " . $e->getMessage());
+            return null;
         } finally {
-            @unlink($tempfile);
+            // Always clean up temp file.
+            if ($tempFile !== null && file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
         }
     }
-
     /**
-     * Basic DOCX text extraction without external library.
+     * Extract text from a DOCX file using ZipArchive.
      *
      * @param \stored_file $file The stored file
      * @return string Extracted text
      */
-    private function extract_docx_text_basic(\stored_file $file): string {
+    private function extract_docx_text(\stored_file $file): string
+    {
         $content = $file->get_content();
 
         // Create temp file.
@@ -509,31 +447,6 @@ class grade_submission_task extends \core\task\adhoc_task {
     }
 
     /**
-     * Extract text from PhpWord element recursively.
-     *
-     * @param mixed $element The element to extract text from
-     * @return string Extracted text
-     */
-    private function extract_element_text(mixed $element): string {
-        $text = '';
-
-        if (method_exists($element, 'getText')) {
-            $elementText = $element->getText();
-            if (is_string($elementText)) {
-                $text .= $elementText;
-            }
-        }
-
-        if (method_exists($element, 'getElements')) {
-            foreach ($element->getElements() as $childElement) {
-                $text .= $this->extract_element_text($childElement);
-            }
-        }
-
-        return $text;
-    }
-
-    /**
      * Call the AI API for grading based on the selected provider.
      *
      * @param string $provider The AI provider ('gemini' or 'qwen')
@@ -541,7 +454,6 @@ class grade_submission_task extends \core\task\adhoc_task {
      * @param string $referenceAnswer The reference answer
      * @param string $studentResponse The student's text response
      * @param int $autogradingoption The autograding option (1, 2, or 3)
-     * @param array $imageParts Array of image parts for vision-based grading
      * @return array|null Array with 'grade' and 'explanation', or null on error
      * @throws \moodle_exception When rate limited (HTTP 429) to trigger retry.
      */
@@ -550,28 +462,13 @@ class grade_submission_task extends \core\task\adhoc_task {
         string $question,
         string $referenceAnswer,
         string $studentResponse,
-        int $autogradingoption,
-        array $imageParts = []
+        int $autogradingoption
     ): ?array {
-        // Determine if this is an image-based submission.
-        $hasImages = !empty($imageParts);
-
-        // Build the user content based on the autograding option and submission type.
-        if ($hasImages) {
-            // Image-based grading (handwriting).
-            if ($autogradingoption === 1) {
-                $userContent = $this->build_image_content_without_reference($question);
-            } else {
-                $userContent = $this->build_image_content_with_reference($question, $referenceAnswer);
-            }
+        // Build the user content based on the autograding option.
+        if ($autogradingoption === 1) {
+            $userContent = $this->build_user_content_without_reference($question, $studentResponse);
         } else {
-            // Text-based grading.
-            if ($autogradingoption === 1) {
-                $userContent = $this->build_user_content_without_reference($question, $studentResponse);
-            } else {
-                $userContent = $this->build_user_content_with_reference($question, $referenceAnswer, $studentResponse);
-                // mtrace("[AUTOGRADING TASK] User content:", $userContent);
-            }
+            $userContent = $this->build_user_content_with_reference($question, $referenceAnswer, $studentResponse);
         }
 
         // Get the system instruction from config.
@@ -583,25 +480,22 @@ class grade_submission_task extends \core\task\adhoc_task {
 
         // Route to the appropriate provider.
         if ($provider === 'qwen') {
-            return $this->call_qwen_api($systemInstruction, $userContent, $imageParts);
+            return $this->call_qwen_api($systemInstruction, $userContent);
         } else {
-            return $this->call_gemini_api($systemInstruction, $userContent, $imageParts);
+            return $this->call_gemini_api($systemInstruction, $userContent);
         }
     }
 
     /**
      * Call the Google Gemini API for grading.
      *
-     * Supports both text-only and vision (image + text) grading using Gemini's
-     * multimodal capabilities.
-     *
      * @param string $systemInstruction The system instruction for the AI
      * @param string $userContent The user content (grading request text)
-     * @param array $imageParts Array of image parts for vision-based grading
      * @return array|null Array with 'grade' and 'explanation', or null on error
      * @throws \moodle_exception When rate limited (HTTP 429) to trigger retry.
      */
-    private function call_gemini_api(string $systemInstruction, string $userContent, array $imageParts = []): ?array {
+    private function call_gemini_api(string $systemInstruction, string $userContent): ?array
+    {
         // Get API key.
         $apiKey = get_config('local_autograding', 'gemini_api_key');
         if (empty($apiKey)) {
@@ -615,27 +509,6 @@ class grade_submission_task extends \core\task\adhoc_task {
         // Build the API endpoint URL.
         $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
 
-        // Build the content parts array.
-        $contentParts = [];
-
-        // If we have images, add them first (vision grading).
-        if (!empty($imageParts)) {
-            mtrace("[AUTOGRADING TASK] Building vision payload with " . count($imageParts) . " image(s)");
-
-            foreach ($imageParts as $imagePart) {
-                $contentParts[] = [
-                    'inlineData' => [
-                        'mimeType' => $imagePart['mimeType'],
-                        'data' => $imagePart['data'],
-                    ],
-                ];
-                mtrace("[AUTOGRADING TASK] Added image: " . ($imagePart['filename'] ?? 'unknown') . " ({$imagePart['mimeType']})");
-            }
-        }
-
-        // Add the text prompt (already contains image-specific instructions if needed).
-        $contentParts[] = ['text' => $userContent];
-
         // Prepare the request payload with systemInstruction.
         $payload = [
             'systemInstruction' => [
@@ -646,7 +519,9 @@ class grade_submission_task extends \core\task\adhoc_task {
             'contents' => [
                 [
                     'role' => 'user',
-                    'parts' => $contentParts,
+                    'parts' => [
+                        ['text' => $userContent],
+                    ],
                 ],
             ],
             'generationConfig' => [
@@ -659,30 +534,46 @@ class grade_submission_task extends \core\task\adhoc_task {
         ];
 
         try {
-            // Use Moodle's HTTP client.
-            $client = new \core\http_client();
+            // Use native cURL for API calls.
+            $ch = curl_init();
 
             mtrace("[AUTOGRADING TASK] API Model: " . $model);
             mtrace("[AUTOGRADING TASK] Sending request to Gemini API...");
 
-            $response = $client->post($endpoint, [
-                'headers' => [
-                    'Content-Type' => 'application/json',
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $endpoint,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
                 ],
-                'body' => json_encode($payload),
-                'timeout' => 60,
             ]);
 
-            $httpcode = $response->getStatusCode();
-            $responseBody = $response->getBody()->getContents();
+            $responseBody = curl_exec($ch);
+            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+
+            curl_close($ch);
+
+            if ($curlError) {
+                mtrace("[AUTOGRADING TASK] Gemini API curl error: {$curlError}");
+                return null;
+            }
 
             mtrace("[AUTOGRADING TASK] HTTP Response Code: " . $httpcode);
 
             // Handle rate limiting - throw exception to trigger retry.
             if ($httpcode === 429) {
                 mtrace("[AUTOGRADING TASK] Rate limited (HTTP 429), task will be retried");
-                throw new \moodle_exception('ratelimited', 'local_autograding', '', null,
-                    'API rate limit exceeded, task will be automatically retried');
+                throw new \moodle_exception(
+                    'ratelimited',
+                    'local_autograding',
+                    '',
+                    null,
+                    'API rate limit exceeded, task will be automatically retried'
+                );
             }
 
             if ($httpcode !== 200) {
@@ -721,32 +612,13 @@ class grade_submission_task extends \core\task\adhoc_task {
     /**
      * Call the Local Qwen API for grading (OpenAI-compatible format).
      *
-     * Note: Local Qwen (text-model) cannot process images. If images are submitted,
-     * they will be ignored and a warning will be included in the feedback.
-     *
      * @param string $systemInstruction The system instruction for the AI
      * @param string $userContent The user content (grading request)
-     * @param array $imageParts Array of image parts (will be ignored with warning)
      * @return array|null Array with 'grade' and 'explanation', or null on error
      * @throws \moodle_exception When rate limited (HTTP 429) to trigger retry.
      */
-    private function call_qwen_api(string $systemInstruction, string $userContent, array $imageParts = []): ?array {
-        // Check if images were submitted - Qwen cannot process them.
-        $imageWarning = '';
-        if (!empty($imageParts)) {
-            mtrace("[AUTOGRADING TASK] WARNING: " . count($imageParts) . " image(s) submitted but Local Qwen cannot process images");
-            $imageWarning = get_string('qwen_image_warning', 'local_autograding');
-
-            // If there's no text content and only images, we cannot grade.
-            if (empty(trim($userContent)) || $userContent === $this->build_user_content_without_reference('', '')) {
-                mtrace("[AUTOGRADING TASK] ERROR: Only images submitted but Qwen cannot process images");
-                return [
-                    'grade' => 0,
-                    'explanation' => get_string('qwen_image_only_error', 'local_autograding'),
-                ];
-            }
-        }
-
+    private function call_qwen_api(string $systemInstruction, string $userContent): ?array
+    {
         // Get endpoint URL.
         $endpoint = get_config('local_autograding', 'qwen_endpoint');
         if (empty($endpoint)) {
@@ -770,30 +642,46 @@ class grade_submission_task extends \core\task\adhoc_task {
         mtrace("[AUTOGRADING TASK] payload " . json_encode($payload, JSON_UNESCAPED_UNICODE));
 
         try {
-            // Use Moodle's HTTP client.
-            $client = new \core\http_client();
+            // Use native cURL for local API calls.
+            $ch = curl_init();
 
             mtrace("[AUTOGRADING TASK] API Model: " . $model);
             mtrace("[AUTOGRADING TASK] Sending request to Qwen API at: " . $endpoint);
 
-            $response = $client->post($endpoint, [
-                'headers' => [
-                    'Content-Type' => 'application/json',
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $endpoint,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 120, // Longer timeout for local models.
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
                 ],
-                'body' => json_encode($payload),
-                'timeout' => 120, // Longer timeout for local models.
             ]);
 
-            $httpcode = $response->getStatusCode();
-            $responseBody = $response->getBody()->getContents();
+            $responseBody = curl_exec($ch);
+            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+
+            curl_close($ch);
+
+            if ($curlError) {
+                mtrace("[AUTOGRADING TASK] Qwen API curl error: {$curlError}");
+                return null;
+            }
 
             mtrace("[AUTOGRADING TASK] HTTP Response Code: " . $httpcode);
 
             // Handle rate limiting - throw exception to trigger retry.
             if ($httpcode === 429) {
                 mtrace("[AUTOGRADING TASK] Rate limited (HTTP 429), task will be retried");
-                throw new \moodle_exception('ratelimited', 'local_autograding', '', null,
-                    'API rate limit exceeded, task will be automatically retried');
+                throw new \moodle_exception(
+                    'ratelimited',
+                    'local_autograding',
+                    '',
+                    null,
+                    'API rate limit exceeded, task will be automatically retried'
+                );
             }
 
             if ($httpcode !== 200) {
@@ -818,14 +706,7 @@ class grade_submission_task extends \core\task\adhoc_task {
             }
 
             // Parse the JSON from the response text.
-            $result = $this->parse_grading_response($textContent);
-
-            // Append image warning to explanation if images were submitted.
-            if ($result !== null && !empty($imageWarning)) {
-                $result['explanation'] = $imageWarning . "\n\n" . $result['explanation'];
-            }
-
-            return $result;
+            return $this->parse_grading_response($textContent);
 
         } catch (\moodle_exception $e) {
             // Re-throw moodle_exception (including rate limit) to trigger retry.
@@ -844,7 +725,8 @@ class grade_submission_task extends \core\task\adhoc_task {
      * @param string $studentResponse The student's response
      * @return string The user content for the AI
      */
-    private function build_user_content_with_reference(string $question, string $referenceAnswer, string $studentResponse): string {
+    private function build_user_content_with_reference(string $question, string $referenceAnswer, string $studentResponse): string
+    {
         return "---
                     [CÂU HỎI]:
                     {$question}
@@ -863,7 +745,8 @@ class grade_submission_task extends \core\task\adhoc_task {
      * @param string $studentResponse The student's response
      * @return string The user content for the AI
      */
-    private function build_user_content_without_reference(string $question, string $studentResponse): string {
+    private function build_user_content_without_reference(string $question, string $studentResponse): string
+    {
         return "---
                     [CÂU HỎI]:
                     {$question}
@@ -873,56 +756,7 @@ class grade_submission_task extends \core\task\adhoc_task {
                 ";
     }
 
-    /**
-     * Build the user content for image-based grading with reference answer.
-     *
-     * This method creates a prompt for grading handwritten submissions
-     * where the student's answer is in attached images.
-     *
-     * @param string $question The question
-     * @param string $referenceAnswer The reference answer
-     * @return string The user content for the AI (Heredoc format)
-     */
-    private function build_image_content_with_reference(string $question, string $referenceAnswer): string {
-        return <<<EOT
-[CÂU HỎI]:
-{$question}
 
-[ĐÁP ÁN CHUẨN]:
-{$referenceAnswer}
-
-[BÀI LÀM CỦA HỌC SINH]:
-(Vui lòng xem các hình ảnh bài làm viết tay được đính kèm trong request này)
-
-[YÊU CẦU XỬ LÝ ẢNH]:
-1. Hãy quan sát kỹ các hình ảnh, trích xuất nội dung chữ viết tay của học sinh.
-2. Nếu có nhiều ảnh, hãy tự động ghép nối nội dung theo thứ tự hợp lý.
-EOT;
-    }
-
-    /**
-     * Build the user content for image-based grading without reference answer (option 1).
-     *
-     * This method creates a prompt for grading handwritten submissions
-     * where no reference answer is provided.
-     *
-     * @param string $question The question
-     * @return string The user content for the AI (Heredoc format)
-     */
-    private function build_image_content_without_reference(string $question): string {
-        return <<<EOT
-[CÂU HỎI]:
-{$question}
-
-[BÀI LÀM CỦA HỌC SINH]:
-(Vui lòng xem các hình ảnh bài làm viết tay được đính kèm trong request này)
-
-[YÊU CẦU CHẤM ĐIỂM]:
-1. Hãy quan sát kỹ các hình ảnh, trích xuất nội dung chữ viết tay của học sinh.
-2. Nếu có nhiều ảnh, hãy tự động ghép nối nội dung theo thứ tự hợp lý.
-3. Dựa trên kiến thức chuyên môn và yêu cầu của [CÂU HỎI], hãy chấm điểm và đưa ra nhận xét chi tiết.
-EOT;
-    }
 
     /**
      * Parse the grading response from Gemini.
@@ -930,7 +764,8 @@ EOT;
      * @param string $responseText The response text from Gemini
      * @return array|null Array with 'grade' and 'explanation', or null on error
      */
-    private function parse_grading_response(string $responseText): ?array {
+    private function parse_grading_response(string $responseText): ?array
+    {
         // Clean up the response text - remove possible markdown code blocks.
         $responseText = trim($responseText);
 
@@ -955,7 +790,7 @@ EOT;
         }
 
         // Validate and normalize grade.
-        $grade = (float)$data['grade'];
+        $grade = (float) $data['grade'];
         $grade = max(0, min(10, $grade)); // Clamp between 0 and 10.
 
         $explanation = $data['explanation'] ?? '';
@@ -976,7 +811,8 @@ EOT;
      * @param object $assign The assignment record
      * @return void
      */
-    private function save_assignment_grade(object $cm, int $userid, float $grade, string $explanation, object $assign): void {
+    private function save_assignment_grade(object $cm, int $userid, float $grade, string $explanation, object $assign): void
+    {
         global $CFG, $DB;
 
         mtrace("[AUTOGRADING TASK] Saving grade - CM ID: {$cm->id}, User ID: {$userid}, Grade: {$grade}");
@@ -991,7 +827,7 @@ EOT;
         $assigninstance = new \assign($context, $cm, $course);
 
         // Get the max grade for this assignment to scale the grade.
-        $maxgrade = (float)$assign->grade;
+        $maxgrade = (float) $assign->grade;
 
         // Handle negative grades (scale reference) - use absolute value.
         if ($maxgrade < 0) {

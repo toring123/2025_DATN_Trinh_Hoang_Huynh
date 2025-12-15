@@ -5,8 +5,7 @@ declare(strict_types=1);
  * Library functions for local_autograding plugin.
  *
  * @package    local_autograding
- * @copyright  2025 Your Name
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright  2025 Nguyen Huu Trinh
  */
 
 defined('MOODLE_INTERNAL') || die();
@@ -18,7 +17,8 @@ defined('MOODLE_INTERNAL') || die();
  * @param \MoodleQuickForm $mform The form object
  * @return void
  */
-function local_autograding_coursemodule_standard_elements(\moodleform_mod $formwrapper, \MoodleQuickForm $mform): void {
+function local_autograding_coursemodule_standard_elements(\moodleform_mod $formwrapper, \MoodleQuickForm $mform): void
+{
     global $DB;
 
     // Only add the field for assign modules.
@@ -37,7 +37,7 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
     if ($cmid !== null && $cmid > 0) {
         $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option, answer');
         if ($record !== false) {
-            $currentvalue = (int)$record->autograding_option;
+            $currentvalue = (int) $record->autograding_option;
             $currentanswer = $record->answer ?? '';
         }
 
@@ -171,9 +171,10 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
  * @param mixed ...$args Variable number of arguments from Moodle
  * @return array Array of errors
  */
-function local_autograding_coursemodule_validation(...$args): array {
+function local_autograding_coursemodule_validation(...$args): array
+{
     $errors = [];
-    
+
     // Handle different calling conventions.
     // Sometimes Moodle passes: ($data, $files)
     // Sometimes Moodle passes: ($formobject, $data, $files)
@@ -191,15 +192,15 @@ function local_autograding_coursemodule_validation(...$args): array {
 
     // Ensure $data is an array.
     if (is_object($data)) {
-        $data = (array)$data;
+        $data = (array) $data;
     }
 
-    $autogradingoption = isset($data['autograding_option']) ? (int)$data['autograding_option'] : 0;
+    $autogradingoption = isset($data['autograding_option']) ? (int) $data['autograding_option'] : 0;
 
     // Validate option 2: Text answer required.
     if ($autogradingoption === 2) {
         $textanswer = '';
-        
+
         // Editor field returns array with 'text' key.
         if (isset($data['autograding_text_answer'])) {
             if (is_array($data['autograding_text_answer'])) {
@@ -208,7 +209,7 @@ function local_autograding_coursemodule_validation(...$args): array {
                 $textanswer = $data['autograding_text_answer'];
             }
         }
-        
+
         $textanswer = trim(strip_tags($textanswer));
 
         if (empty($textanswer)) {
@@ -219,12 +220,12 @@ function local_autograding_coursemodule_validation(...$args): array {
     // Validate option 3: File required.
     if ($autogradingoption === 3) {
         $draftitemid = $data['autograding_file_answer'] ?? 0;
-        
+
         // Check if files were uploaded.
         $fs = get_file_storage();
         $usercontext = context_user::instance($data['userid'] ?? 0);
         $draftfiles = $fs->get_area_files($usercontext->id, 'user', 'draft', $draftitemid, 'id', false);
-        
+
         if (empty($draftfiles)) {
             $errors['autograding_file_answer'] = get_string('file_answer_required', 'local_autograding');
         } else {
@@ -237,7 +238,7 @@ function local_autograding_coursemodule_validation(...$args): array {
                     break;
                 }
             }
-            
+
             if (!$validpdf) {
                 $errors['autograding_file_answer'] = get_string('file_answer_pdf_only', 'local_autograding');
             }
@@ -257,7 +258,8 @@ function local_autograding_coursemodule_validation(...$args): array {
  * @param object $course Course object
  * @return object The unmodified $data object
  */
-function local_autograding_coursemodule_edit_post_actions(object $data, object $course): object {
+function local_autograding_coursemodule_edit_post_actions(object $data, object $course): object
+{
     global $CFG, $USER;
 
     // error_log("[AUTOGRADING] ========================================");
@@ -273,9 +275,9 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
     }
 
     // Get course module ID and ensure it's an integer.
-    $cmid = isset($data->coursemodule) ? (int)$data->coursemodule : 0;
+    $cmid = isset($data->coursemodule) ? (int) $data->coursemodule : 0;
     // error_log("[AUTOGRADING] Course module ID: " . $cmid);
-    
+
     if ($cmid <= 0) {
         // error_log("[AUTOGRADING] ERROR: Invalid cmid: " . ($data->coursemodule ?? 'null'));
         // error_log("[AUTOGRADING] POST_ACTIONS ENDED (invalid cmid)");
@@ -283,7 +285,7 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
     }
 
     // Get autograding option.
-    $autogradingoption = isset($data->autograding_option) ? (int)$data->autograding_option : 0;
+    $autogradingoption = isset($data->autograding_option) ? (int) $data->autograding_option : 0;
     // error_log("[AUTOGRADING] Autograding option: " . $autogradingoption);
 
     // Process based on option.
@@ -294,12 +296,12 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
         // Option 2: Text answer from editor.
         if (isset($data->autograding_text_answer)) {
             $editordata = $data->autograding_text_answer;
-            
+
             // Editor field returns array with 'text', 'format', and 'itemid'.
             if (is_array($editordata)) {
                 $answertext = $editordata['text'] ?? '';
                 $draftitemid = $editordata['itemid'] ?? 0;
-                
+
                 // Save files from editor to permanent storage.
                 if ($draftitemid > 0) {
                     $context = context_system::instance();
@@ -316,7 +318,7 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
                 // Fallback for non-editor format.
                 $answertext = $editordata;
             }
-            
+
             $answertext = trim($answertext);
             // error_log("[AUTOGRADING] Text answer length: " . strlen($answertext));
             if (empty($answertext)) {
@@ -327,13 +329,13 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
         // error_log("[AUTOGRADING] Processing option 3: file answer");
         // Option 3: File answer - extract text from PDF.
         if (isset($data->autograding_file_answer)) {
-            $draftitemid = (int)$data->autograding_file_answer;
+            $draftitemid = (int) $data->autograding_file_answer;
             // error_log("[AUTOGRADING] Draft item ID: " . $draftitemid);
-            
+
             // Get user ID from global USER object.
             $userid = $USER->id;
             // error_log("[AUTOGRADING] Current user ID: " . $userid);
-            
+
             // Check what's in the draft area before saving.
             $fs = get_file_storage();
             $usercontext = context_user::instance($userid);
@@ -342,7 +344,7 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
             foreach ($draftfiles as $df) {
                 // error_log("[AUTOGRADING]   Draft file: " . $df->get_filename() . " (" . $df->get_filesize() . " bytes)");
             }
-            
+
             // Save files from draft area to permanent storage.
             $context = context_system::instance();
             // error_log("[AUTOGRADING] Saving files to permanent storage...");
@@ -350,7 +352,7 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
             // error_log("[AUTOGRADING]   Component: local_autograding");
             // error_log("[AUTOGRADING]   Filearea: answer_file");
             // error_log("[AUTOGRADING]   Item ID: " . $cmid);
-            
+
             file_save_draft_area_files(
                 $draftitemid,
                 $context->id,
@@ -359,9 +361,9 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
                 $cmid,
                 ['subdirs' => 0, 'maxfiles' => 1]
             );
-            
+
             // error_log("[AUTOGRADING] Files saved to permanent storage");
-            
+
             // Verify files were saved.
             $savedfiles = $fs->get_area_files($context->id, 'local_autograding', 'answer_file', $cmid, 'id', false);
             // error_log("[AUTOGRADING] Files in permanent storage: " . count($savedfiles));
@@ -372,9 +374,9 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
             // Extract text from the uploaded PDF.
             // error_log("[AUTOGRADING] Calling PDF extraction function...");
             $answertext = local_autograding_extract_pdf_text($cmid);
-            
+
             // error_log("[AUTOGRADING] PDF extraction returned: " . ($answertext === null ? 'NULL' : strlen($answertext) . ' characters'));
-            
+
             if ($answertext === null) {
                 // error_log("[AUTOGRADING] ERROR: Failed to extract text from PDF for cmid " . $cmid);
                 $answertext = ''; // Save empty string on failure.
@@ -393,7 +395,7 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
     // error_log("[AUTOGRADING] ========================================");
     // error_log("[AUTOGRADING] POST_ACTIONS ENDED");
     // error_log("[AUTOGRADING] ========================================");
-    
+
     // Return the unmodified data object.
     return $data;
 }
@@ -406,7 +408,8 @@ function local_autograding_coursemodule_edit_post_actions(object $data, object $
  * @param string|null $answer The text answer (for option 2 or extracted from PDF for option 3)
  * @return bool Success status
  */
-function local_autograding_save_option(int $cmid, int $autogradingoption, ?string $answer = null): bool {
+function local_autograding_save_option(int $cmid, int $autogradingoption, ?string $answer = null): bool
+{
     global $DB;
 
     // error_log("[AUTOGRADING] save_option called with: cmid=$cmid, option=$autogradingoption, answer=" . ($answer === null ? 'NULL' : strlen($answer) . ' chars'));
@@ -441,21 +444,21 @@ function local_autograding_save_option(int $cmid, int $autogradingoption, ?strin
             $existing->autograding_option = $autogradingoption;
             $existing->answer = $answer;
             $existing->timemodified = time();
-            
+
             // error_log("[AUTOGRADING] About to update: option={$existing->autograding_option}, answer length=" . ($existing->answer ? strlen($existing->answer) : 0));
-            
+
             $result = $DB->update_record('local_autograding', $existing);
-            
+
             if ($result) {
                 // error_log("[AUTOGRADING] SUCCESS: Updated record for cmid $cmid");
-                
+
                 // Verify the update.
                 $verify = $DB->get_record('local_autograding', ['cmid' => $cmid]);
                 // error_log("[AUTOGRADING] Verification: answer in DB is " . ($verify->answer ? strlen($verify->answer) . ' chars' : 'NULL'));
             } else {
                 // error_log("[AUTOGRADING] ERROR: Update returned false");
             }
-            
+
             return $result;
         } else {
             // Insert new record.
@@ -466,21 +469,21 @@ function local_autograding_save_option(int $cmid, int $autogradingoption, ?strin
             $record->answer = $answer;
             $record->timecreated = time();
             $record->timemodified = time();
-            
+
             // error_log("[AUTOGRADING] About to insert: cmid={$record->cmid}, option={$record->autograding_option}, answer length=" . ($record->answer ? strlen($record->answer) : 0));
-            
+
             $result = $DB->insert_record('local_autograding', $record);
-            
+
             if ($result) {
                 // error_log("[AUTOGRADING] SUCCESS: Inserted new record with ID $result");
-                
+
                 // Verify the insert.
                 $verify = $DB->get_record('local_autograding', ['id' => $result]);
                 // error_log("[AUTOGRADING] Verification: answer in DB is " . ($verify->answer ? strlen($verify->answer) . ' chars' : 'NULL'));
             } else {
                 // error_log("[AUTOGRADING] ERROR: Insert failed");
             }
-            
+
             return $result !== false;
         }
     } catch (\dml_exception $e) {
@@ -496,7 +499,8 @@ function local_autograding_save_option(int $cmid, int $autogradingoption, ?strin
  * @param int $cmid Course module ID
  * @return object|null Object with autograding_option and answer fields, or null if not found
  */
-function local_autograding_get_option(int $cmid): ?object {
+function local_autograding_get_option(int $cmid): ?object
+{
     global $DB;
 
     if ($cmid <= 0) {
@@ -521,7 +525,8 @@ function local_autograding_get_option(int $cmid): ?object {
  * @param int $cmid Course module ID
  * @return bool Success status
  */
-function local_autograding_delete_option(int $cmid): bool {
+function local_autograding_delete_option(int $cmid): bool
+{
     global $DB;
 
     if ($cmid <= 0) {
@@ -543,116 +548,108 @@ function local_autograding_delete_option(int $cmid): bool {
 }
 
 /**
- * Extracts text content from uploaded PDF file.
+ * Extracts text content from uploaded PDF file using OCR server.
  *
  * @param int $cmid Course module ID
  * @return string|null Extracted text or null on failure
  */
-function local_autograding_extract_pdf_text(int $cmid): ?string {
-    global $CFG;
+function local_autograding_extract_pdf_text(int $cmid): ?string
+{
+    // Get OCR server URL from config.
+    $ocrServerUrl = get_config('local_autograding', 'ocr_server_url');
 
-    // error_log("[AUTOGRADING] === Starting PDF extraction for cmid: " . $cmid . " ===");
+    if (empty($ocrServerUrl)) {
+        debugging('[AUTOGRADING] ERROR: OCR server URL not configured', DEBUG_DEVELOPER);
+        return null;
+    }
 
+    $tempFile = null;
     try {
-        // Step 1: Check autoloader exists.
-        $autoloadpath = $CFG->dirroot . '/local/autograding/vendor/autoload.php';
-        // error_log("[AUTOGRADING] Checking autoloader at: " . $autoloadpath);
-        
-        if (!file_exists($autoloadpath)) {
-            // error_log("[AUTOGRADING] ERROR: Composer autoloader not found at: " . $autoloadpath);
-            // error_log("[AUTOGRADING] Run: cd " . $CFG->dirroot . "/local/autograding/ && composer require smalot/pdfparser");
-            return null;
-        }
-        
-        // error_log("[AUTOGRADING] Autoloader found, requiring...");
-        require_once($autoloadpath);
-        // error_log("[AUTOGRADING] Autoloader loaded successfully");
-
-        // Step 2: Get the uploaded file.
+        // Step 1: Get the uploaded file.
         $fs = get_file_storage();
         $context = context_system::instance();
-        
-        // error_log("[AUTOGRADING] Searching for files - contextid: " . $context->id . ", component: local_autograding, filearea: answer_file, itemid: " . $cmid);
-        
+
         $files = $fs->get_area_files($context->id, 'local_autograding', 'answer_file', $cmid, 'id', false);
 
-        // error_log("[AUTOGRADING] Files found: " . count($files));
-
         if (empty($files)) {
-            // error_log("[AUTOGRADING] ERROR: No files found in storage for cmid " . $cmid);
-            
-            // Debug: List all files in this area.
-            $allfiles = $fs->get_area_files($context->id, 'local_autograding', 'answer_file', $cmid);
-            // error_log("[AUTOGRADING] All files (including directories): " . count($allfiles));
-            foreach ($allfiles as $f) {
-                // error_log("[AUTOGRADING]   - File: " . $f->get_filename() . " (id: " . $f->get_id() . ")");
-            }
-            
+            debugging('[AUTOGRADING] ERROR: No files found in storage for cmid ' . $cmid, DEBUG_DEVELOPER);
             return null;
         }
 
-        // Step 3: Get the first (and only) file.
+        // Step 2: Get the first (and only) file.
         $file = reset($files);
-        // error_log("[AUTOGRADING] Processing file: " . $file->get_filename());
-        // error_log("[AUTOGRADING] File size: " . $file->get_filesize() . " bytes");
-        // error_log("[AUTOGRADING] File mimetype: " . $file->get_mimetype());
-        
-        // Step 4: Get file content.
+        $filename = $file->get_filename();
         $filecontent = $file->get_content();
-        
+
         if (empty($filecontent)) {
-            // error_log("[AUTOGRADING] ERROR: File content is empty for file: " . $file->get_filename());
+            debugging('[AUTOGRADING] ERROR: File content is empty for file: ' . $filename, DEBUG_DEVELOPER);
             return null;
         }
-        
-        // error_log("[AUTOGRADING] File content loaded: " . strlen($filecontent) . " bytes");
 
-        // Step 5: Check if class exists.
-        if (!class_exists('\Smalot\PdfParser\Parser')) {
-            // error_log("[AUTOGRADING] ERROR: Smalot\PdfParser\Parser class not found!");
-            // error_log("[AUTOGRADING] Composer dependencies may not be properly installed");
+        // Step 3: Send file to OCR server.
+        $url = rtrim($ocrServerUrl, '/') . '/ocr-pdf';
+
+        // Create a temporary file for curl upload.
+        $tempFile = tempnam(sys_get_temp_dir(), 'ocr_pdf_');
+        file_put_contents($tempFile, $filecontent);
+
+        // Use curl for multipart/form-data upload.
+        $ch = curl_init();
+
+        $postFields = [
+            'file' => new \CURLFile($tempFile, $file->get_mimetype(), $filename),
+        ];
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postFields,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 120,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+            ],
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+
+        curl_close($ch);
+
+        if ($curlError) {
+            debugging('[AUTOGRADING] OCR API curl error: ' . $curlError, DEBUG_DEVELOPER);
             return null;
         }
-        
-        // error_log("[AUTOGRADING] Parser class exists, creating instance...");
 
-        // Step 6: Parse PDF using smalot/pdfparser.
-        $parser = new \Smalot\PdfParser\Parser();
-        // error_log("[AUTOGRADING] Parser instance created, parsing content...");
-        
-        $pdf = $parser->parseContent($filecontent);
-        // error_log("[AUTOGRADING] PDF parsed successfully");
-        
-        // Step 7: Extract text.
-        // error_log("[AUTOGRADING] Extracting text from PDF...");
-        $text = $pdf->getText();
-        
-        // error_log("[AUTOGRADING] Raw extracted text length: " . strlen($text) . " characters");
-        
-        // Step 8: Clean up the text.
-        $text = trim($text);
-        
-        if (empty($text)) {
-            // error_log("[AUTOGRADING] WARNING: Extracted text is empty for cmid " . $cmid);
-            // error_log("[AUTOGRADING] This could mean: 1) PDF is scanned images (needs OCR), 2) PDF is password protected, 3) PDF structure issue");
+        if ($httpCode !== 200) {
+            debugging('[AUTOGRADING] OCR API returned HTTP ' . $httpCode . ': ' . substr($response, 0, 500), DEBUG_DEVELOPER);
+            return null;
+        }
+
+        $responseData = json_decode($response, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            debugging('[AUTOGRADING] OCR API JSON decode error: ' . json_last_error_msg(), DEBUG_DEVELOPER);
+            return null;
+        }
+
+        $extractedText = $responseData['text'] ?? '';
+
+        if (empty($extractedText)) {
+            debugging('[AUTOGRADING] OCR returned empty text for cmid ' . $cmid, DEBUG_DEVELOPER);
             return '';
         }
 
-        // error_log("[AUTOGRADING] SUCCESS: Extracted " . strlen($text) . " characters from PDF");
-        // error_log("[AUTOGRADING] First 200 chars: " . substr($text, 0, 200));
-        // error_log("[AUTOGRADING] === PDF extraction completed successfully ===");
-        
-        return $text;
+        return trim($extractedText);
 
-    } catch (\Smalot\PdfParser\Exception\InvalidPdfException $e) {
-        // error_log("[AUTOGRADING] ERROR: Invalid PDF structure: " . $e->getMessage());
-        // error_log("[AUTOGRADING] Stack trace: " . $e->getTraceAsString());
-        return null;
     } catch (\Exception $e) {
-        // error_log("[AUTOGRADING] ERROR: Exception during PDF extraction for cmid " . $cmid);
-        // error_log("[AUTOGRADING] Exception type: " . get_class($e));
-        // error_log("[AUTOGRADING] Exception message: " . $e->getMessage());
-        // error_log("[AUTOGRADING] Stack trace: " . $e->getTraceAsString());
+        debugging('[AUTOGRADING] ERROR: Exception during PDF extraction for cmid ' . $cmid . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
         return null;
+    } finally {
+        // Always clean up temp file.
+        if ($tempFile !== null && file_exists($tempFile)) {
+            @unlink($tempFile);
+        }
     }
 }

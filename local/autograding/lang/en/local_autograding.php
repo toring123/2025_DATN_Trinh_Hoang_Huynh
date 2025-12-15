@@ -70,6 +70,7 @@ QUY TẮC CHẤM ĐIỂM (Thang 0 - 10):
    - 3-5 điểm: Đúng một phần nhỏ, nhưng thiếu nhiều ý quan trọng hoặc hiểu sai bản chất.
    - 6-8 điểm: Hiểu bài, trả lời khá đúng nhưng thiếu sót nhỏ hoặc diễn đạt chưa chặt chẽ.
    - 9-10 điểm: Chính xác hoàn toàn, đầy đủ các ý trong đáp án chuẩn.
+4. Lưu ý: Nếu [Câu Hỏi] có nhiều câu hỏi, hãy chấm điểm theo từng câu với mức điểm tối đa của từng câu, từng ý được ghi sẵn trong [Đáp Án Chuẩn].
 ';
 $string['system_instruction_footer'] = '
 YÊU CẦU ĐẦU RA (JSON Strict Mode):
@@ -78,7 +79,7 @@ YÊU CẦU ĐẦU RA (JSON Strict Mode):
 - Cấu trúc bắt buộc:
 {
   "grade": <số_thực_từ_0_đến_10>,
-  "explanation": "<Nhận xét chi tiết. Sử dụng ký tự \\n để xuống dòng giữa các ý. Ví dụ: \"Ý 1 đúng.\\nTuy nhiên ý 2 còn thiếu.\">"
+  "explanation": "<Nhận xét chi tiết. Sử dụng ký tự \\n để xuống dòng giữa các ý, Nếu đề bài có nhiều câu thì hãy giải thích cho từng câu và ngăn cách bởi ký tự \\n. Ví dụ: \"Ý 1 đúng.\\nTuy nhiên ý 2 còn thiếu.\">"
 }';
 
 // Local Qwen Settings.
@@ -107,3 +108,10 @@ $string['locktimeout'] = 'Could not acquire lock for API call';
 // Image grading strings (for Qwen provider limitations).
 $string['qwen_image_warning'] = '[Note: Image(s) were submitted but could not be processed by Local Qwen. Only text content was graded. For image/handwriting grading, please use Gemini provider.]';
 $string['qwen_image_only_error'] = 'This submission contains only image files, but the Local Qwen provider cannot process images. Please switch to Gemini provider for image/handwriting grading, or ask the student to resubmit in text format.';
+
+// OCR Server Settings.
+$string['ocr_settings_header'] = 'OCR Server Settings';
+$string['ocr_settings_desc'] = 'Configure the OCR server for extracting text from PDFs and images before grading. Leave empty to use built-in parsers (for PDF/DOCX) or Vision API (for images).';
+$string['ocr_server_url'] = 'OCR Server URL';
+$string['ocr_server_url_desc'] = 'The URL of the OCR server (e.g., http://127.0.0.1:8001). When configured, PDFs and images will be sent to this server for text extraction.';
+$string['ocr_api_error'] = 'Error communicating with OCR server: {$a}';
