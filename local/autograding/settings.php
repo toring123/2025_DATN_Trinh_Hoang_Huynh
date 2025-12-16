@@ -10,6 +10,8 @@ declare(strict_types=1);
 
 defined('MOODLE_INTERNAL') || die();
 
+use local_autograding\llm_service;
+
 if ($hassiteconfig) {
     // Create new settings page under Site administration > Plugins > Local plugins.
     $settings = new admin_settingpage(
@@ -61,19 +63,16 @@ if ($hassiteconfig) {
         ''
     ));
 
-    // Add Gemini Model selection setting.
-    $models = [
-        'gemini-2.5-flash' => 'Gemini 2.5 Flash (Recommended)',
-        'gemini-2.0-flash' => 'Gemini 2.0 Flash',
-        'gemini-1.5-flash' => 'Gemini 1.5 Flash',
-        'gemini-1.5-pro' => 'Gemini 1.5 Pro',
-    ];
+    // Add Gemini Model selection setting with dynamic options.
+    // Fetch models from API if available, otherwise use defaults.
+    $geminimodels = llm_service::get_available_models('gemini');
     $settings->add(new admin_setting_configselect(
         'local_autograding/gemini_model',
         get_string('gemini_model', 'local_autograding'),
-        get_string('gemini_model_desc', 'local_autograding'),
+        get_string('gemini_model_desc', 'local_autograding') . ' ' .
+            get_string('refresh_page_for_models', 'local_autograding'),
         'gemini-2.5-flash',
-        $models
+        $geminimodels
     ));
 
     // Add Local Qwen section header.
@@ -91,12 +90,15 @@ if ($hassiteconfig) {
         'http://localhost:11434/v1/chat/completions'
     ));
 
-    // Add Local Qwen Model setting.
-    $settings->add(new admin_setting_configtext(
+    // Add Local Qwen Model selection setting with dynamic options.
+    $qwenmodels = llm_service::get_available_models('qwen');
+    $settings->add(new admin_setting_configselect(
         'local_autograding/qwen_model',
         get_string('qwen_model', 'local_autograding'),
-        get_string('qwen_model_desc', 'local_autograding'),
-        'qwen2.5-3b-instruct'
+        get_string('qwen_model_desc', 'local_autograding') . ' ' .
+            get_string('refresh_page_for_models', 'local_autograding'),
+        'qwen2.5:3b',
+        $qwenmodels
     ));
 
     // Add OCR Server section header.

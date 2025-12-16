@@ -88,7 +88,10 @@ $string['qwen_settings_desc'] = 'Configure the local Qwen AI endpoint for automa
 $string['qwen_endpoint'] = 'Qwen Endpoint URL';
 $string['qwen_endpoint_desc'] = 'Enter the URL of your local Qwen API endpoint. Default: http://localhost:11434/v1/chat/completions';
 $string['qwen_model'] = 'Qwen Model';
-$string['qwen_model_desc'] = 'Enter the Qwen model name to use. Default: qwen2.5-3b-instruct';
+$string['qwen_model_desc'] = 'Select the Qwen model to use for grading.';
+
+// Dynamic model fetching strings.
+$string['refresh_page_for_models'] = '(Save settings and refresh page to update available models from API)';
 
 // Auto-grading messages.
 $string['autograding_disabled'] = 'Auto-grading is not enabled for this assignment.';

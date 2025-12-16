@@ -11,7 +11,7 @@ declare(strict_types=1);
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_autograding';
-$plugin->version = 2025120102; // Bumped version for auto-grading API feature.
+$plugin->version = 2025120103; // Bumped version for auto-grading API feature.
 $plugin->requires = 2024100700; // Moodle 5.0.
 $plugin->maturity = MATURITY_STABLE;
 $plugin->release = 'v1.2.0';
