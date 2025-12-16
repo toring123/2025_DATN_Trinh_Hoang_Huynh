@@ -87,7 +87,15 @@ class observer
         // Get the text answer if provided.
         $textanswer = null;
         if ($autogradingoption === 2) {
-            $textanswer = optional_param('autograding_text_answer', '', PARAM_TEXT);
+            // Handle both array format (from Moodle editor) and plain string format.
+            $textanswerarray = optional_param_array('autograding_text_answer', null, PARAM_RAW);
+            if ($textanswerarray !== null && is_array($textanswerarray)) {
+                // Editor format: array with 'text' key.
+                $textanswer = isset($textanswerarray['text']) ? clean_param($textanswerarray['text'], PARAM_TEXT) : '';
+            } else {
+                // Plain string format.
+                $textanswer = optional_param('autograding_text_answer', '', PARAM_TEXT);
+            }
             $textanswer = trim($textanswer);
 
             // Ensure it's not empty for option 2.
