@@ -118,3 +118,7 @@ $string['ocr_settings_desc'] = 'Configure the OCR server for extracting text fro
 $string['ocr_server_url'] = 'OCR Server URL';
 $string['ocr_server_url_desc'] = 'The URL of the OCR server (e.g., http://127.0.0.1:8001). When configured, PDFs and images will be sent to this server for text extraction.';
 $string['ocr_api_error'] = 'Error communicating with OCR server: {$a}';
+
+// Dynamic model fetching strings.
+$string['no_model_available'] = '--No model--';
+$string['fetching_models'] = 'Fetching models...';

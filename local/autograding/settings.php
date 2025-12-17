@@ -70,7 +70,7 @@ if ($hassiteconfig) {
         'local_autograding/gemini_model',
         get_string('gemini_model', 'local_autograding'),
         get_string('gemini_model_desc', 'local_autograding') . ' ' .
-            get_string('refresh_page_for_models', 'local_autograding'),
+        get_string('refresh_page_for_models', 'local_autograding'),
         'gemini-2.5-flash',
         $geminimodels
     ));
@@ -96,7 +96,7 @@ if ($hassiteconfig) {
         'local_autograding/qwen_model',
         get_string('qwen_model', 'local_autograding'),
         get_string('qwen_model_desc', 'local_autograding') . ' ' .
-            get_string('refresh_page_for_models', 'local_autograding'),
+        get_string('refresh_page_for_models', 'local_autograding'),
         'qwen2.5:3b',
         $qwenmodels
     ));
@@ -121,10 +121,15 @@ if ($hassiteconfig) {
 
     // Inject JavaScript for conditional display of provider-specific settings.
     // This script will show/hide Gemini or Qwen settings based on the selected provider.
+    // It also handles real-time model fetching when API key or endpoint changes.
     $PAGE->requires->js_amd_inline("
         require(['jquery'], function($) {
             $(document).ready(function() {
                 var providerSelect = $('#id_s_local_autograding_ai_provider');
+                var geminiApiKeyInput = $('#id_s_local_autograding_gemini_api_key');
+                var geminiModelSelect = $('#id_s_local_autograding_gemini_model');
+                var qwenEndpointInput = $('#id_s_local_autograding_qwen_endpoint');
+                var qwenModelSelect = $('#id_s_local_autograding_qwen_model');
 
                 // Define the setting rows to toggle.
                 var geminiSettings = [
@@ -137,6 +142,90 @@ if ($hassiteconfig) {
                     '#admin-qwen_endpoint',
                     '#admin-qwen_model'
                 ];
+
+                // Debounce function to limit API calls.
+                function debounce(func, wait) {
+                    var timeout;
+                    return function() {
+                        var context = this, args = arguments;
+                        clearTimeout(timeout);
+                        timeout = setTimeout(function() {
+                            func.apply(context, args);
+                        }, wait);
+                    };
+                }
+
+                // Fetch models from API and update dropdown.
+                function fetchModels(provider, apikey, endpoint, selectElement) {
+                    var ajaxUrl = M.cfg.wwwroot + '/local/autograding/ajax/get_models.php';
+                    var params = { provider: provider };
+
+                    if (provider === 'gemini' && apikey) {
+                        params.apikey = apikey;
+                    } else if (provider === 'qwen' && endpoint) {
+                        params.endpoint = endpoint;
+                    }
+
+                    // Show loading state.
+                    selectElement.prop('disabled', true);
+                    var currentValue = selectElement.val();
+
+                    $.ajax({
+                        url: ajaxUrl,
+                        type: 'GET',
+                        data: params,
+                        dataType: 'json',
+                        success: function(response) {
+                            selectElement.empty();
+
+                            if (response.success && response.models && response.models.length > 0) {
+                                $.each(response.models, function(i, model) {
+                                    var option = $('<option></option>')
+                                        .attr('value', model.id)
+                                        .text(model.name);
+                                    selectElement.append(option);
+                                });
+
+                                // Try to restore previous selection if still valid.
+                                if (selectElement.find('option[value=\"' + currentValue + '\"]').length > 0) {
+                                    selectElement.val(currentValue);
+                                }
+                            } else {
+                                selectElement.append(
+                                    $('<option></option>')
+                                        .attr('value', '--nomodel--')
+                                        .text('--No model--')
+                                );
+                            }
+                        },
+                        error: function() {
+                            selectElement.empty();
+                            selectElement.append(
+                                $('<option></option>')
+                                    .attr('value', '--nomodel--')
+                                    .text('--No model--')
+                            );
+                        },
+                        complete: function() {
+                            selectElement.prop('disabled', false);
+                        }
+                    });
+                }
+
+                // Debounced handlers for input changes.
+                var debouncedGeminiFetch = debounce(function() {
+                    var apikey = geminiApiKeyInput.val();
+                    fetchModels('gemini', apikey, '', geminiModelSelect);
+                }, 500);
+
+                var debouncedQwenFetch = debounce(function() {
+                    var endpoint = qwenEndpointInput.val();
+                    fetchModels('qwen', '', endpoint, qwenModelSelect);
+                }, 500);
+
+                // Attach input listeners for real-time fetching.
+                geminiApiKeyInput.on('input', debouncedGeminiFetch);
+                qwenEndpointInput.on('input', debouncedQwenFetch);
 
                 function toggleProviderSettings() {
                     var selectedProvider = providerSelect.val();

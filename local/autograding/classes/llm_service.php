@@ -41,6 +41,24 @@ class llm_service
     }
 
     /**
+     * Get list of available models using provided credentials (for real-time validation).
+     * Unlike get_available_models(), this does NOT fall back to defaults on failure.
+     *
+     * @param string $provider The AI provider ('gemini' or 'qwen')
+     * @param string $apikey Optional API key for Gemini (if empty, uses saved config)
+     * @param string $endpoint Optional endpoint for Qwen (if empty, uses saved config)
+     * @return array List of models as [id => display_name], or ['--nomodel--' => '--No model--'] on failure
+     */
+    public static function get_available_models_with_credentials(string $provider, string $apikey = '', string $endpoint = ''): array
+    {
+        if ($provider === 'gemini') {
+            return self::fetch_gemini_models_realtime($apikey);
+        } else {
+            return self::fetch_ollama_models_realtime($endpoint);
+        }
+    }
+
+    /**
      * Fetch available Gemini models from Google API.
      *
      * @return array List of models as [id => display_name]
@@ -193,6 +211,138 @@ class llm_service
         ];
     }
 
+    /**
+     * Fetch Gemini models using provided API key for real-time validation.
+     * Unlike fetch_gemini_models(), this does NOT fall back to defaults.
+     *
+     * @param string $apiKey The API key to use (if empty, uses saved config)
+     * @return array List of models, or ['--nomodel--' => '--No model--'] on failure
+     */
+    private static function fetch_gemini_models_realtime(string $apiKey = ''): array
+    {
+        // Use provided key or fall back to saved config.
+        if (empty($apiKey)) {
+            $apiKey = get_config('local_autograding', 'gemini_api_key');
+        }
+
+        if (empty($apiKey)) {
+            return ['--nomodel--' => '--No model--'];
+        }
+
+        $url = self::GEMINI_API_BASE . "/models?key={$apiKey}";
+
+        try {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 15,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                ],
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                return ['--nomodel--' => '--No model--'];
+            }
+
+            $data = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE || empty($data['models'])) {
+                return ['--nomodel--' => '--No model--'];
+            }
+
+            $models = [];
+            foreach ($data['models'] as $model) {
+                $supportedMethods = $model['supportedGenerationMethods'] ?? [];
+                if (in_array('generateContent', $supportedMethods, true)) {
+                    $name = $model['name'] ?? '';
+                    $id = str_replace('models/', '', $name);
+                    $displayName = $model['displayName'] ?? $id;
+                    $models[$id] = $displayName;
+                }
+            }
+
+            return !empty($models) ? $models : ['--nomodel--' => '--No model--'];
+
+        } catch (\Exception $e) {
+            return ['--nomodel--' => '--No model--'];
+        }
+    }
+
+    /**
+     * Fetch Ollama models using provided endpoint for real-time validation.
+     * Unlike fetch_ollama_models(), this does NOT fall back to defaults.
+     *
+     * @param string $endpoint The endpoint URL to use (if empty, uses saved config)
+     * @return array List of models, or ['--nomodel--' => '--No model--'] on failure
+     */
+    private static function fetch_ollama_models_realtime(string $endpoint = ''): array
+    {
+        // Use provided endpoint or fall back to saved config.
+        if (empty($endpoint)) {
+            $endpoint = get_config('local_autograding', 'qwen_endpoint');
+        }
+
+        if (empty($endpoint)) {
+            $endpoint = self::DEFAULT_OLLAMA_ENDPOINT . '/v1/chat/completions';
+        }
+
+        // Extract base URL from endpoint (remove /v1/chat/completions).
+        $baseUrl = preg_replace('#/v1/chat/completions$#', '', $endpoint);
+        $modelsUrl = rtrim($baseUrl, '/') . '/v1/models';
+
+        try {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $modelsUrl,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 5,
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                return ['--nomodel--' => '--No model--'];
+            }
+
+            $data = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return ['--nomodel--' => '--No model--'];
+            }
+
+            $models = [];
+
+            // Handle OpenAI-compatible format.
+            if (isset($data['data']) && is_array($data['data'])) {
+                foreach ($data['data'] as $model) {
+                    $id = $model['id'] ?? '';
+                    if (!empty($id)) {
+                        $models[$id] = $id;
+                    }
+                }
+            }
+            // Handle Ollama native format.
+            else if (isset($data['models']) && is_array($data['models'])) {
+                foreach ($data['models'] as $model) {
+                    $name = $model['name'] ?? '';
+                    if (!empty($name)) {
+                        $models[$name] = $name;
+                    }
+                }
+            }
+
+            return !empty($models) ? $models : ['--nomodel--' => '--No model--'];
+
+        } catch (\Exception $e) {
+            return ['--nomodel--' => '--No model--'];
+        }
+    }
     /**
      * Grade a student submission using AI.
      *
@@ -367,7 +517,7 @@ class llm_service
     {
         // Get endpoint URL from config.
         $configEndpoint = get_config('local_autograding', 'qwen_endpoint');
-        
+
         // Ensure endpoint has the correct path.
         if (empty($configEndpoint)) {
             $endpoint = self::DEFAULT_OLLAMA_ENDPOINT . '/v1/chat/completions';

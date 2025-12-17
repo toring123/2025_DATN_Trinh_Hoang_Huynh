@@ -19,6 +19,10 @@ require_capability('moodle/site:config', context_system::instance());
 // Get the provider parameter.
 $provider = required_param('provider', PARAM_ALPHA);
 
+// Get optional credentials for real-time validation (not yet saved).
+$apikey = optional_param('apikey', '', PARAM_RAW);
+$endpoint = optional_param('endpoint', '', PARAM_URL);
+
 // Validate provider.
 if (!in_array($provider, ['gemini', 'qwen'], true)) {
     echo json_encode([
@@ -30,8 +34,12 @@ if (!in_array($provider, ['gemini', 'qwen'], true)) {
 }
 
 try {
-    // Fetch models from the API.
-    $models = llm_service::get_available_models($provider);
+    // Fetch models using provided credentials or saved config.
+    if ($provider === 'gemini') {
+        $models = llm_service::get_available_models_with_credentials('gemini', $apikey, '');
+    } else {
+        $models = llm_service::get_available_models_with_credentials('qwen', '', $endpoint);
+    }
 
     // Convert to array format for JSON.
     $modelsArray = [];
