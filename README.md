@@ -20,5 +20,17 @@ docker build -t ocr_gpu_server .
 
 Chạy server trên Docker
 ```
-docker run -d ^ --name ocr_server ^ --gpus all ^ -p 8001:8001 ^ -v "%cd%\models:/root/.EasyOCR/model" ^ ocr_gpu_server
+docker run -d --name ocr_server --gpus all -p 8001:8001 -v "%cd%\models:/root/.EasyOCR/model" ocr_gpu_server
+```
+
+## Cách thiết lập server LLM sử dụng Ollama
+
+Mở Terminal tại thư mục ocr-server, gõ lệnh sau để triển khai server LLM riêng
+```
+docker run -d --gpus all -v ollama_data:/root/.ollama -p 11434:11434 --name llm_server ollama/ollama
+```
+
+Tải model Qwen2.5-3B
+```
+docker exec -it llm_server ollama run qwen2.5:3b
 ```
