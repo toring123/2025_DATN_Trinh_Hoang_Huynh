@@ -12,6 +12,7 @@ namespace local_autograding\task;
 
 use local_autograding\llm_service;
 use local_autograding\ocr_service;
+use local_autograding\grading_status;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -39,8 +40,7 @@ class grade_submission_task extends \core\task\adhoc_task
      * Execute the task.
      *
      * This method retrieves submission data, calls the AI API for grading,
-     * and saves the resulting grade. It implements concurrency locking to prevent
-     * API rate limit errors.
+     * and saves the resulting grade. It implements retry logic with status tracking.
      *
      * @return void
      * @throws \moodle_exception If the task should be retried later.
@@ -69,26 +69,44 @@ class grade_submission_task extends \core\task\adhoc_task
 
         mtrace("[AUTOGRADING TASK] Starting grading task for cmid: {$cmid}, userid: {$userid}");
 
+        // Update status to processing and check attempts.
+        if ($submissionid !== null) {
+            $attempts = grading_status::get_attempts($submissionid);
+            mtrace("[AUTOGRADING TASK] Attempt {$attempts} of " . grading_status::MAX_ATTEMPTS);
+
+            // Check if max attempts already reached.
+            if (grading_status::is_max_attempts_reached($submissionid)) {
+                mtrace("[AUTOGRADING TASK] Max attempts reached for submission {$submissionid}, marking as failed");
+                grading_status::set_failed($submissionid, 'Maximum retry attempts exceeded');
+                return;
+            }
+
+            grading_status::set_processing($submissionid);
+        }
+
         try {
             // Step 1: Verify the course module still exists.
             $cm = get_coursemodule_from_id('assign', $cmid, 0, false, IGNORE_MISSING);
             if (!$cm) {
                 mtrace("[AUTOGRADING TASK] Course module {$cmid} no longer exists, skipping");
-                return; // Don't retry - assignment was deleted.
+                $this->handle_permanent_failure($submissionid, 'Assignment was deleted');
+                return;
             }
 
             // Step 2: Check if autograding is still enabled for this assignment.
             $autogradingconfig = $DB->get_record('local_autograding', ['cmid' => $cmid]);
             if (!$autogradingconfig || (int) $autogradingconfig->autograding_option === 0) {
                 mtrace("[AUTOGRADING TASK] Autograding not enabled for cmid: {$cmid}");
-                return; // Don't retry - autograding was disabled.
+                $this->handle_permanent_failure($submissionid, 'Autograding was disabled');
+                return;
             }
 
             // Step 3: Get the assignment instance.
             $assign = $DB->get_record('assign', ['id' => $cm->instance], '*', IGNORE_MISSING);
             if (!$assign) {
                 mtrace("[AUTOGRADING TASK] Assignment instance not found for cmid: {$cmid}");
-                return; // Don't retry - assignment was deleted.
+                $this->handle_permanent_failure($submissionid, 'Assignment was deleted');
+                return;
             }
 
             // Step 4: Get the question (assignment description).
@@ -106,7 +124,8 @@ class grade_submission_task extends \core\task\adhoc_task
             $question = implode("\n\n", $parts);
             if (empty($question)) {
                 mtrace("[AUTOGRADING TASK] Assignment question is empty for cmid: {$cmid}");
-                return; // Don't retry - configuration error.
+                $this->handle_permanent_failure($submissionid, 'Assignment has no question/description');
+                return;
             }
 
             // Step 5: Get reference answer.
@@ -116,7 +135,8 @@ class grade_submission_task extends \core\task\adhoc_task
             // For options 2 and 3, reference answer is required.
             if (($autogradingoption === 2 || $autogradingoption === 3) && empty($referenceAnswer)) {
                 mtrace("[AUTOGRADING TASK] Reference answer required but empty for option {$autogradingoption}");
-                return; // Don't retry - configuration error.
+                $this->handle_permanent_failure($submissionid, 'Reference answer not configured');
+                return;
             }
 
             // Step 6: Get student submission text (including OCR-extracted text from images/PDFs).
@@ -124,7 +144,8 @@ class grade_submission_task extends \core\task\adhoc_task
 
             if (empty($studentResponse)) {
                 mtrace("[AUTOGRADING TASK] No student submission content found for user {$userid}");
-                return; // Don't retry - no submission to grade.
+                $this->handle_permanent_failure($submissionid, 'No submission content to grade');
+                return;
             }
 
             mtrace("[AUTOGRADING TASK] Student response: " . strlen($studentResponse) . " chars");
@@ -134,8 +155,6 @@ class grade_submission_task extends \core\task\adhoc_task
             mtrace("[AUTOGRADING TASK] Using AI provider: {$provider}");
 
             // Step 8: Call AI API using the LLM service.
-            // Note: Rate limiting (HTTP 429) is handled by throwing moodle_exception
-            // which triggers Moodle's built-in task retry mechanism.
             $gradingResult = llm_service::grade(
                 $provider,
                 $question,
@@ -146,7 +165,8 @@ class grade_submission_task extends \core\task\adhoc_task
 
             if ($gradingResult === null) {
                 mtrace("[AUTOGRADING TASK] AI API returned null result");
-                return; // Don't retry - API returned invalid response.
+                $this->handle_retryable_failure($submissionid, 'AI API returned invalid response');
+                return;
             }
 
             mtrace("[AUTOGRADING TASK] AI API returned grade: {$gradingResult['grade']}");
@@ -156,13 +176,59 @@ class grade_submission_task extends \core\task\adhoc_task
             $this->save_assignment_grade($cm, $userid, $gradingResult['grade'], $gradingResult['explanation'], $assign);
             mtrace("[AUTOGRADING TASK] Grade saved successfully for user {$userid}!");
 
+            // Mark as success.
+            if ($submissionid !== null) {
+                grading_status::set_success($submissionid);
+                mtrace("[AUTOGRADING TASK] Status updated to SUCCESS");
+            }
+
         } catch (\moodle_exception $e) {
-            // Re-throw moodle_exception to trigger retry.
-            throw $e;
+            // Handle rate limiting and server errors - these should retry.
+            $errorCode = $e->errorcode ?? '';
+            if ($errorCode === 'ratelimited' || $errorCode === 'servererror') {
+                $this->handle_retryable_failure($submissionid, $e->getMessage());
+                throw $e; // Re-throw to trigger Moodle retry.
+            }
+            // Other moodle_exceptions - permanent failure.
+            $this->handle_permanent_failure($submissionid, $e->getMessage());
         } catch (\Exception $e) {
             mtrace("[AUTOGRADING TASK] Exception: " . $e->getMessage());
-            // For unexpected errors, don't retry to avoid infinite loops.
+            $this->handle_retryable_failure($submissionid, $e->getMessage());
+        }
+    }
+
+    /**
+     * Handle a retryable failure - check if max attempts reached.
+     *
+     * @param int|null $submissionid Submission ID
+     * @param string $errorMessage Error message
+     */
+    private function handle_retryable_failure(?int $submissionid, string $errorMessage): void
+    {
+        if ($submissionid === null) {
             return;
+        }
+
+        if (grading_status::is_max_attempts_reached($submissionid)) {
+            mtrace("[AUTOGRADING TASK] Max attempts reached, marking as permanently failed");
+            grading_status::set_failed($submissionid, $errorMessage);
+        } else {
+            mtrace("[AUTOGRADING TASK] Will retry (attempts: " . grading_status::get_attempts($submissionid) . ")");
+            // Status remains 'processing', will be set to 'pending' by retry or 'failed' on max attempts.
+        }
+    }
+
+    /**
+     * Handle a permanent failure - no retry.
+     *
+     * @param int|null $submissionid Submission ID
+     * @param string $errorMessage Error message
+     */
+    private function handle_permanent_failure(?int $submissionid, string $errorMessage): void
+    {
+        if ($submissionid !== null) {
+            grading_status::set_failed($submissionid, $errorMessage);
+            mtrace("[AUTOGRADING TASK] Status updated to FAILED: {$errorMessage}");
         }
     }
 

@@ -122,3 +122,45 @@ $string['ocr_api_error'] = 'Error communicating with OCR server: {$a}';
 // Dynamic model fetching strings.
 $string['no_model_available'] = '--No model--';
 $string['fetching_models'] = 'Fetching models...';
+
+// Grading progress page strings.
+$string['grading_progress_title'] = 'AI Grading Progress';
+$string['status_pending'] = 'Pending';
+$string['status_processing'] = 'Processing';
+$string['status_success'] = 'Success';
+$string['status_failed'] = 'Failed';
+$string['student'] = 'Student';
+$string['status'] = 'Status';
+$string['attempts'] = 'Attempts';
+$string['last_updated'] = 'Last Updated';
+$string['error_message'] = 'Error Message';
+$string['actions'] = 'Actions';
+$string['retry'] = 'Retry';
+$string['retrying'] = 'Retrying...';
+$string['grade_manually'] = 'Grade manually';
+$string['view_grade'] = 'View grade';
+$string['back_to_grading'] = 'Back to Grading';
+$string['no_submissions_yet'] = 'No submissions have been queued for AI grading yet.';
+$string['auto_refresh_info'] = 'This page auto-refreshes every 10 seconds.';
+
+// Scheduled task.
+$string['task_send_failure_digest'] = 'Send daily digest of failed grading attempts';
+
+// Notification/digest strings.
+$string['messageprovider:grading_failure'] = 'Grading failure notifications';
+$string['digest_subject'] = 'AI Grading Failures: {$a}';
+$string['digest_small'] = '{$a} submissions failed AI grading';
+$string['digest_message'] = 'AI grading failed for {$a->count} submission(s) in "{$a->assignmentname}" ({$a->coursename}).
+
+Students affected: {$a->students}{$a->more}
+
+View progress and retry: {$a->url}';
+$string['and_more'] = ' and {$a} more';
+
+// Capability strings.
+$string['autograding:viewprogress'] = 'View AI grading progress';
+$string['autograding:manage'] = 'Manage autograding settings';
+
+// Server error.
+$string['servererror'] = 'Server error occurred';
+

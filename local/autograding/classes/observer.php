@@ -14,6 +14,7 @@ use core\event\course_module_created;
 use core\event\course_module_updated;
 use core\event\course_module_deleted;
 use mod_assign\event\assessable_submitted;
+use local_autograding\grading_status;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -221,6 +222,10 @@ class observer
             $taskdata->userid = $userid;
             $taskdata->contextid = $contextid;
             $taskdata->submissionid = $submissionid;
+
+            // Create status record for tracking.
+            grading_status::create_or_update($cmid, $userid, $submissionid, grading_status::STATUS_PENDING);
+            error_log("[AUTOGRADING] Status record created for submission {$submissionid}");
 
             // Create and queue the adhoc task.
             $task = new \local_autograding\task\grade_submission_task();
