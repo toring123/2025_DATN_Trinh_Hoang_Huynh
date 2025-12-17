@@ -20,9 +20,15 @@ $cm = get_coursemodule_from_id('assign', $cmid, 0, false, MUST_EXIST);
 $course = $DB->get_record('course', ['id' => $cm->course], '*', MUST_EXIST);
 $context = context_module::instance($cm->id);
 
-// Require login and capability.
+// Require login and check capability with graceful handling.
 require_login($course, false, $cm);
-require_capability('mod/assign:grade', $context);
+
+// Check capability - redirect instead of throwing exception with stack trace.
+if (!has_capability('mod/assign:grade', $context)) {
+    $assignurl = new moodle_url('/mod/assign/view.php', ['id' => $cmid]);
+    redirect($assignurl, get_string('nopermissions', 'error', get_string('grading_progress_title', 'local_autograding')), null, \core\output\notification::NOTIFY_ERROR);
+}
+
 
 // Check if autograding is enabled.
 $autogradingconfig = $DB->get_record('local_autograding', ['cmid' => $cmid]);
