@@ -153,7 +153,9 @@ class grading_status
     {
         global $DB;
 
-        $sql = "SELECT s.*, u.firstname, u.lastname, u.email
+        // Include all name fields required by fullname() function.
+        $sql = "SELECT s.*, u.firstname, u.lastname, u.firstnamephonetic, 
+                       u.lastnamephonetic, u.middlename, u.alternatename, u.email
                 FROM {local_autograding_status} s
                 JOIN {user} u ON u.id = s.userid
                 WHERE s.cmid = :cmid
@@ -172,7 +174,8 @@ class grading_status
     {
         global $DB;
 
-        $sql = "SELECT s.*, cm.course, u.firstname, u.lastname
+        $sql = "SELECT s.*, cm.course, u.firstname, u.lastname, u.firstnamephonetic,
+                       u.lastnamephonetic, u.middlename, u.alternatename
                 FROM {local_autograding_status} s
                 JOIN {course_modules} cm ON cm.id = s.cmid
                 JOIN {user} u ON u.id = s.userid
