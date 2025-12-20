@@ -11,7 +11,7 @@ declare(strict_types=1);
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_autograding';
-$plugin->version = 2025121800; // Migrated to new hook system for before_http_headers.
+$plugin->version = 2025122001; // Added check connection buttons for Ollama and OCR.
 $plugin->requires = 2024100700; // Moodle 5.0.
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'v1.3.1';
+$plugin->release = 'v1.4.0';

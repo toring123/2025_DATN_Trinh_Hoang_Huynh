@@ -164,3 +164,12 @@ $string['autograding:manage'] = 'Manage autograding settings';
 // Server error.
 $string['servererror'] = 'Server error occurred';
 
+// Connection check strings.
+$string['check_connection'] = 'Check Connection';
+$string['checking_connection'] = 'Checking...';
+$string['connection_success'] = 'Connection successful';
+$string['connection_failed'] = 'Connection failed';
+$string['invalid_response'] = 'Invalid response from server';
+$string['ollama_connection_info'] = 'Models available: {$a}';
+$string['ocr_connection_info'] = 'OCR server is running';
+

@@ -116,6 +116,16 @@ if ($hassiteconfig) {
         'http://127.0.0.1:8001'
     ));
 
+    // Add OCR Check Connection button.
+    $ocrcheckbtn = '<button type="button" id="check_ocr_connection" class="btn btn-secondary">' .
+        get_string('check_connection', 'local_autograding') . '</button>' .
+        '<span id="ocr_connection_status" class="ml-2"></span>';
+    $settings->add(new admin_setting_heading(
+        'local_autograding/ocr_check_connection',
+        '',
+        $ocrcheckbtn
+    ));
+
     // Add the settings page to the local plugins category.
     $ADMIN->add('localplugins', $settings);
 
@@ -255,6 +265,52 @@ if ($hassiteconfig) {
                 // Toggle on provider change.
                 providerSelect.on('change', function() {
                     toggleProviderSettings();
+                });
+
+                // Check connection function.
+                function checkConnection(service, endpoint, statusElement) {
+                    var ajaxUrl = M.cfg.wwwroot + '/local/autograding/ajax/check_connection.php';
+                    var params = { service: service };
+                    if (endpoint) {
+                        params.endpoint = endpoint;
+                    }
+
+                    statusElement.removeClass('text-success text-danger').html(
+                        '<i class=\"fa fa-spinner fa-spin\"></i> Checking...'
+                    );
+
+                    $.ajax({
+                        url: ajaxUrl,
+                        type: 'GET',
+                        data: params,
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                var msg = '<i class=\"fa fa-check-circle\"></i> ' + response.message;
+                                if (response.details) {
+                                    if (response.details.model_count !== undefined) {
+                                        msg += ' (' + response.details.model_count + ' models)';
+                                    }
+                                }
+                                statusElement.removeClass('text-danger').addClass('text-success').html(msg);
+                            } else {
+                                statusElement.removeClass('text-success').addClass('text-danger').html(
+                                    '<i class=\"fa fa-times-circle\"></i> ' + response.message
+                                );
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            statusElement.removeClass('text-success').addClass('text-danger').html(
+                                '<i class=\"fa fa-times-circle\"></i> Connection failed: ' + error
+                            );
+                        }
+                    });
+                }
+
+                // OCR check connection button handler.
+                $('#check_ocr_connection').on('click', function() {
+                    var endpoint = $('#id_s_local_autograding_ocr_server_url').val();
+                    checkConnection('ocr', endpoint, $('#ocr_connection_status'));
                 });
             });
         });

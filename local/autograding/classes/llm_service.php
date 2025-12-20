@@ -120,16 +120,11 @@ class llm_service
     /**
      * Get default Gemini models when API is unavailable.
      *
-     * @return array Default models
+     * @return array Default models or no model indicator
      */
     private static function get_default_gemini_models(): array
     {
-        return [
-            'gemini-2.5-flash' => 'Gemini 2.5 Flash (Recommended)',
-            'gemini-2.0-flash' => 'Gemini 2.0 Flash',
-            'gemini-1.5-flash' => 'Gemini 1.5 Flash',
-            'gemini-1.5-pro' => 'Gemini 1.5 Pro',
-        ];
+        return ['--nomodel--' => '--No model--'];
     }
 
     /**
@@ -200,15 +195,11 @@ class llm_service
     /**
      * Get default Ollama models when API is unavailable.
      *
-     * @return array Default models
+     * @return array Default models or no model indicator
      */
     private static function get_default_ollama_models(): array
     {
-        return [
-            'qwen2.5:3b' => 'Qwen 2.5 3B',
-            'qwen2.5:7b' => 'Qwen 2.5 7B',
-            'llama3.2:3b' => 'Llama 3.2 3B',
-        ];
+        return ['--nomodel--' => '--No model--'];
     }
 
     /**
