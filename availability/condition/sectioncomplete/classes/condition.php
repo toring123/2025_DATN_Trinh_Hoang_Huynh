@@ -414,17 +414,6 @@ class condition extends \core_availability\condition {
                     $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
                     break;
                 }
-                case 'scorm': {
-                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 's');
-                    $sqlSubmit = "SELECT sst.userid, COUNT(DISTINCT ss.scorm) AS cnt
-                                  FROM {scorm_scoes_track} sst
-                                  JOIN {scorm_scoes} ss ON ss.id = sst.scoid
-                                  WHERE ss.scorm $in
-                                    AND sst.userid $userSql
-                                  GROUP BY sst.userid";
-                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
-                    break;
-                }
                 case 'data': {
                     list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'd');
                     $sqlSubmit = "SELECT dr.userid, COUNT(DISTINCT dr.dataid) AS cnt
