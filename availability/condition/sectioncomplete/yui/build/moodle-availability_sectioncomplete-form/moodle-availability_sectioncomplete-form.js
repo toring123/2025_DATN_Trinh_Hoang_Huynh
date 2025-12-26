@@ -15,14 +15,14 @@ M.availability_sectioncomplete.form.getNode = function(json) {
                '</span> <select class="custom-select" name="section" title="' + 
                M.util.get_string('section', 'availability_sectioncomplete') + '">';
     
-    html += '<option value="">Choose...</option>';
+    html += '<option value="">' + M.util.get_string('choose', 'availability_sectioncomplete') + '</option>';
     
     if (this.sections) {
         for (var i = 0; i < this.sections.length; i++) {
             var sec = this.sections[i];
             var selected = (json.section === sec.number) ? ' selected' : '';
             html += '<option value="' + sec.number + '"' + selected + '>' + 
-                    Y.Escape.html(sec.name) + ' (' + sec.activitycount + ' activities)</option>';
+                    Y.Escape.html(sec.name) + ' (' + sec.activitycount + ' ' + M.util.get_string('activities', 'availability_sectioncomplete') + ')</option>';
         }
     }
     
