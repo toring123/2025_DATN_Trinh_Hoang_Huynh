@@ -171,7 +171,7 @@ try {
             $endpoint = get_config('local_autograding', 'qwen_endpoint');
         }
         if (empty($endpoint)) {
-            $endpoint = 'http://localhost:11434/v1/chat/completions';
+            $endpoint = 'http://localhost:11434';
         }
         $result = check_ollama_connection($endpoint);
     } else {

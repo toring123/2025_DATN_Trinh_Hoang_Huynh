@@ -625,14 +625,11 @@ class llm_service
         string $studentResponse
     ): string {
         return "---
-[CÂU HỎI]:
-{$question}
-[ĐÁP ÁN CHUẨN]:
-{$referenceAnswer}
-[CÂU TRẢ LỜI CỦA HỌC SINH]:
-{$studentResponse}
----
-";
+            <question>{$question}</question>
+            <standart_answer>{$referenceAnswer}</standart_answer>
+            <student_response>{$studentResponse}</student_response>
+            ---
+        ";
     }
 
     /**
@@ -647,12 +644,10 @@ class llm_service
         string $studentResponse
     ): string {
         return "---
-[CÂU HỎI]:
-{$question}
-[CÂU TRẢ LỜI CỦA HỌC SINH]:
-{$studentResponse}
----
-";
+                <question>{$question}</question>
+                <student_response>{$studentResponse}</student_response>
+                ---
+        ";
     }
 
     /**

@@ -87,7 +87,7 @@ if ($hassiteconfig) {
         'local_autograding/qwen_endpoint',
         get_string('qwen_endpoint', 'local_autograding'),
         get_string('qwen_endpoint_desc', 'local_autograding'),
-        'http://localhost:11434/v1/chat/completions'
+        'http://localhost:11434'
     ));
 
     // Add Local Qwen Model selection setting with dynamic options.
