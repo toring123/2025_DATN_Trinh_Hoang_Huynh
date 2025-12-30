@@ -31,12 +31,12 @@ if (!has_capability('mod/assign:grade', $context)) {
 }
 
 // Get all status records for this assignment.
-$statusrecords = grading_status::get_all_for_assignment($cmid);
+$autograding_status = grading_status::get_all_for_assignment($cmid);
 $summary = grading_status::get_summary($cmid);
 
 // Build response data.
 $records = [];
-foreach ($statusrecords as $record) {
+foreach ($autograding_status as $record) {
     $records[] = [
         'submissionid' => (int) $record->submissionid,
         'userid' => (int) $record->userid,

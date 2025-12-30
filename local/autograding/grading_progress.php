@@ -48,7 +48,8 @@ $PAGE->navbar->add(get_string('grading_progress_title', 'local_autograding'));
 $assign = $DB->get_record('assign', ['id' => $cm->instance], '*', MUST_EXIST);
 
 // Get all status records for this assignment.
-$statusrecords = grading_status::get_all_for_assignment($cmid);
+$autograding_status = grading_status::get_all_for_assignment($cmid);
+
 $summary = grading_status::get_summary($cmid);
 
 // Output page.
@@ -83,7 +84,7 @@ echo '</div>';
 echo '<p class="text-muted small">' . get_string('auto_refresh_info', 'local_autograding') . '</p>';
 
 // Status table.
-if (empty($statusrecords)) {
+if (empty($autograding_status)) {
     echo $OUTPUT->notification(get_string('no_submissions_yet', 'local_autograding'), 'info');
 } else {
     // Build table manually for better control over data attributes.
@@ -98,7 +99,7 @@ if (empty($statusrecords)) {
     echo '</tr></thead>';
     echo '<tbody>';
 
-    foreach ($statusrecords as $record) {
+    foreach ($autograding_status as $record) {
         $studentname = fullname($record);
 
         // Status badge.

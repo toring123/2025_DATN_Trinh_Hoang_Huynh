@@ -37,6 +37,19 @@ class grade_submission_task extends \core\task\adhoc_task
     }
 
     /**
+     * Get the concurrency limit for this task.
+     *
+     * Limits to 1 to ensure only one grading task runs at a time.
+     * This prevents API rate limiting issues and ensures sequential processing.
+     *
+     * @return int The maximum number of concurrent tasks
+     */
+    public static function get_concurrency_limit(): int
+    {
+        return 1;
+    }
+
+    /**
      * Execute the task.
      *
      * This method retrieves submission data, calls the AI API for grading,

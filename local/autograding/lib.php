@@ -11,6 +11,63 @@ declare(strict_types=1);
 defined('MOODLE_INTERNAL') || die();
 
 /**
+ * Loads autograding form data from database and prepares file areas.
+ *
+ * @param int|null $cmid Course module ID
+ * @return array Array with keys: currentvalue, currentanswer, draftitemid, textdraftitemid
+ */
+function get_local_autograding(?int $cmid): array
+{
+    global $DB;
+
+    $data = [
+        'currentvalue' => 0,
+        'currentanswer' => '',
+        'draftitemid' => 0,
+        'textdraftitemid' => 0,
+    ];
+
+    if ($cmid === null || $cmid <= 0) {
+        return $data;
+    }
+
+    // Load existing record from database.
+    $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option, answer');
+    if ($record !== false) {
+        $data['currentvalue'] = (int) $record->autograding_option;
+        $data['currentanswer'] = $record->answer ?? '';
+    }
+
+    // Prepare file area for text editor (if option 2).
+    if ($data['currentvalue'] === 2) {
+        $data['textdraftitemid'] = file_get_submitted_draft_itemid('autograding_text_answer');
+        file_prepare_draft_area(
+            $data['textdraftitemid'],
+            context_system::instance()->id,
+            'local_autograding',
+            'text_answer',
+            $cmid,
+            ['subdirs' => 0, 'maxfiles' => 10, 'maxbytes' => 10485760]
+        );
+    }
+
+    // Prepare file area for editing (if option 3).
+    if ($data['currentvalue'] === 3) {
+        $data['draftitemid'] = file_get_submitted_draft_itemid('autograding_file_answer');
+        file_prepare_draft_area(
+            $data['draftitemid'],
+            context_system::instance()->id,
+            'local_autograding',
+            'answer_file',
+            $cmid,
+            ['subdirs' => 0, 'maxfiles' => 1]
+        );
+    }
+
+    return $data;
+}
+
+/**
  * Adds autograding field to course module form for assignments.
  *
  * @param \moodleform_mod $formwrapper The course module form wrapper
@@ -19,8 +76,6 @@ defined('MOODLE_INTERNAL') || die();
  */
 function local_autograding_coursemodule_standard_elements(\moodleform_mod $formwrapper, \MoodleQuickForm $mform): void
 {
-    global $DB;
-
     // Only add the field for assign modules.
     if ($formwrapper->get_current()->modulename !== 'assign') {
         return;
@@ -28,45 +83,13 @@ function local_autograding_coursemodule_standard_elements(\moodleform_mod $formw
 
     // Get the course module ID if editing.
     $cmid = $formwrapper->get_current()->coursemodule ?? null;
-    $currentvalue = 0;
-    $currentanswer = '';
-    $draftitemid = 0;
-    $textdraftitemid = 0;
 
-    // Load existing value if editing.
-    if ($cmid !== null && $cmid > 0) {
-        $record = $DB->get_record('local_autograding', ['cmid' => $cmid], 'autograding_option, answer');
-        if ($record !== false) {
-            $currentvalue = (int) $record->autograding_option;
-            $currentanswer = $record->answer ?? '';
-        }
-
-        // Prepare file area for text editor (if option 2).
-        if ($currentvalue === 2) {
-            $textdraftitemid = file_get_submitted_draft_itemid('autograding_text_answer');
-            file_prepare_draft_area(
-                $textdraftitemid,
-                context_system::instance()->id,
-                'local_autograding',
-                'text_answer',
-                $cmid,
-                ['subdirs' => 0, 'maxfiles' => 10, 'maxbytes' => 10485760]
-            );
-        }
-
-        // Prepare file area for editing (if option 3).
-        if ($currentvalue === 3) {
-            $draftitemid = file_get_submitted_draft_itemid('autograding_file_answer');
-            file_prepare_draft_area(
-                $draftitemid,
-                context_system::instance()->id,
-                'local_autograding',
-                'answer_file',
-                $cmid,
-                ['subdirs' => 0, 'maxfiles' => 1]
-            );
-        }
-    }
+    // Load existing data from database.
+    $local_autograding = get_local_autograding($cmid !== null ? (int) $cmid : null);
+    $currentvalue = $local_autograding['currentvalue'];
+    $currentanswer = $local_autograding['currentanswer'];
+    $draftitemid = $local_autograding['draftitemid'];
+    $textdraftitemid = $local_autograding['textdraftitemid'];
 
     // Define the options.
     $options = [
@@ -553,105 +576,17 @@ function local_autograding_delete_option(int $cmid): bool
  * @param int $cmid Course module ID
  * @return string|null Extracted text or null on failure
  */
+/**
+ * Extract text from a PDF file using OCR service.
+ *
+ * This is a wrapper function that delegates to ocr_service::extract_pdf_text_by_cmid().
+ *
+ * @param int $cmid Course module ID
+ * @return string|null Extracted text, or null on error
+ */
 function local_autograding_extract_pdf_text(int $cmid): ?string
 {
-    // Get OCR server URL from config.
-    $ocrServerUrl = get_config('local_autograding', 'ocr_server_url');
-
-    if (empty($ocrServerUrl)) {
-        debugging('[AUTOGRADING] ERROR: OCR server URL not configured', DEBUG_DEVELOPER);
-        return null;
-    }
-
-    $tempFile = null;
-    try {
-        // Step 1: Get the uploaded file.
-        $fs = get_file_storage();
-        $context = context_system::instance();
-
-        $files = $fs->get_area_files($context->id, 'local_autograding', 'answer_file', $cmid, 'id', false);
-
-        if (empty($files)) {
-            debugging('[AUTOGRADING] ERROR: No files found in storage for cmid ' . $cmid, DEBUG_DEVELOPER);
-            return null;
-        }
-
-        // Step 2: Get the first (and only) file.
-        $file = reset($files);
-        $filename = $file->get_filename();
-        $filecontent = $file->get_content();
-
-        if (empty($filecontent)) {
-            debugging('[AUTOGRADING] ERROR: File content is empty for file: ' . $filename, DEBUG_DEVELOPER);
-            return null;
-        }
-
-        // Step 3: Send file to OCR server.
-        $url = rtrim($ocrServerUrl, '/') . '/ocr-pdf';
-
-        // Create a temporary file for curl upload.
-        $tempFile = tempnam(sys_get_temp_dir(), 'ocr_pdf_');
-        file_put_contents($tempFile, $filecontent);
-
-        // Use curl for multipart/form-data upload.
-        $ch = curl_init();
-
-        $postFields = [
-            'file' => new \CURLFile($tempFile, $file->get_mimetype(), $filename),
-        ];
-
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $postFields,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 120,
-            CURLOPT_HTTPHEADER => [
-                'Accept: application/json',
-            ],
-        ]);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-
-        curl_close($ch);
-
-        if ($curlError) {
-            debugging('[AUTOGRADING] OCR API curl error: ' . $curlError, DEBUG_DEVELOPER);
-            return null;
-        }
-
-        if ($httpCode !== 200) {
-            debugging('[AUTOGRADING] OCR API returned HTTP ' . $httpCode . ': ' . substr($response, 0, 500), DEBUG_DEVELOPER);
-            return null;
-        }
-
-        $responseData = json_decode($response, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            debugging('[AUTOGRADING] OCR API JSON decode error: ' . json_last_error_msg(), DEBUG_DEVELOPER);
-            return null;
-        }
-
-        $extractedText = $responseData['text'] ?? '';
-
-        if (empty($extractedText)) {
-            debugging('[AUTOGRADING] OCR returned empty text for cmid ' . $cmid, DEBUG_DEVELOPER);
-            return '';
-        }
-
-        return trim($extractedText);
-
-    } catch (\Exception $e) {
-        debugging('[AUTOGRADING] ERROR: Exception during PDF extraction for cmid ' . $cmid . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
-        return null;
-    } finally {
-        // Always clean up temp file.
-        if ($tempFile !== null && file_exists($tempFile)) {
-            @unlink($tempFile);
-        }
-    }
+    return \local_autograding\ocr_service::extract_pdf_text_by_cmid($cmid);
 }
 
 /**
