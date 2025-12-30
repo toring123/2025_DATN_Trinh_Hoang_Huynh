@@ -8,8 +8,8 @@ Tài liệu được trình bày chi tiết tại: [Tài liệu](https://docs.go
 
 ## Cách triển khai Moodle & MariaDB trên local
 Hệ thống LMS được đóng gói sử dụng Docker Compose với image từ Bitnami.
-Cơ sở dữ liệu MariaDB được thiết lập qua cổng 3306
-Ứng dụng LMS Moodle được thiết lập trên cổng HTTP 8080, cổng HTTPS 8443
+* Cơ sở dữ liệu MariaDB được thiết lập qua cổng 3306
+* Ứng dụng LMS Moodle được thiết lập trên cổng HTTP 8080, cổng HTTPS 8443
 
 Mở terminal tại thư mục moodle và chạy lệnh
 ```
