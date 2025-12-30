@@ -2,3 +2,4 @@ moodle/mariadb-latest.tar
 moodle/moodle-5.0.tar
 local/autograding/vendor/
 mô tả.csv
+ocr-server/__pycache__/
