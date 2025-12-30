@@ -6,6 +6,26 @@ Nghiên cứu, bổ sung khả năng điều hướng tiến trình học tập 
 
 Tài liệu được trình bày chi tiết tại: [Tài liệu](https://docs.google.com/document/d/1KSeo6XedCPZmHQBWRCpEO1Y22fdH8D-vUGrKrUqg_5I)
 
+## Cách triển khai Moodle & MariaDB trên local
+Hệ thống LMS được đóng gói sử dụng Docker Compose với image từ Bitnami.
+Cơ sở dữ liệu MariaDB được thiết lập qua cổng 3306
+Ứng dụng LMS Moodle được thiết lập trên cổng HTTP 8080, cổng HTTPS 8443
+
+Mở terminal tại thư mục moodle và chạy lệnh
+```
+docker-compose up -d
+```
+
+Sau khi khởi động thành công, truy cập Moodle tại địa chỉ:
+* URL: http://localhost:8080
+* Tài khoản quản trị mặc định: user
+* Mật khẩu mặc định: bitnami
+
+Dữ liệu của Moodle và Database được lưu trữ bền vững (persist) trong các Docker Volumes:
+* mariadb_data: Dữ liệu database.
+* moodle_data: Source code của Moodle.
+* moodledata_data: File upload và session data của Moodle.
+
 ## Cách thiết lập server OCR
 
 Mở Terminal tại thư mục ocr-server, gõ lệnh sau để tạo thư mục lưu model (nếu chưa có):
@@ -13,19 +33,19 @@ Mở Terminal tại thư mục ocr-server, gõ lệnh sau để tạo thư mục
 mkdir models
 ```
 
-Chạy lệnh sau để đóng gói server.
+Chạy lệnh sau để đóng gói server
 ```
 docker build -t ocr_gpu_server .
 ```
 
-Chạy server trên Docker
+Chạy server trên Docker (Server OCR được thiết lập trên cổng 8001)
 ```
 docker run -d --name ocr_server --gpus all -p 8001:8001 -v "%cd%\models:/root/.EasyOCR/model" ocr_gpu_server
 ```
 
 ## Cách thiết lập server LLM sử dụng Ollama
 
-Mở Terminal tại thư mục ocr-server, gõ lệnh sau để triển khai server LLM riêng
+Mở Terminal tại thư mục ocr-server, gõ lệnh sau để triển khai server LLM riêng (Server LLM được thiết lập trên cổng 11434)
 ```
 docker run -d --gpus all -v ollama_data:/root/.ollama -p 11434:11434 --name llm_server ollama/ollama
 ```

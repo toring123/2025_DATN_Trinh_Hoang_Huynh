@@ -1,12 +1,4 @@
 <?php
-/**
- * Capability definitions for local_autorestrict
- *
- * @package    local_autorestrict
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
 $capabilities = [

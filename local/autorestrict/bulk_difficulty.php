@@ -1,38 +1,25 @@
 <?php
-/**
- * Bulk set difficulty for activities
- *
- * @package    local_autorestrict
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 require_once(__DIR__ . '/../../config.php');
 
 $courseid = required_param('courseid', PARAM_INT);
 $action = optional_param('action', '', PARAM_ALPHA);
 
-// Get the course.
 $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
 
-// Require login and course access.
 require_login($course);
 $context = context_course::instance($courseid);
 require_capability('local/autorestrict:manage', $context);
 
-// Set up the page.
 $PAGE->set_url(new moodle_url('/local/autorestrict/bulk_difficulty.php', ['courseid' => $courseid]));
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('incourse');
 $PAGE->set_title(get_string('bulk_difficulty', 'local_autorestrict'));
 $PAGE->set_heading($course->fullname);
 
-// Add navigation.
 $PAGE->navbar->add(get_string('pluginname', 'local_autorestrict'), 
     new moodle_url('/local/autorestrict/course_settings.php', ['courseid' => $courseid]));
 $PAGE->navbar->add(get_string('bulk_difficulty', 'local_autorestrict'));
 
-// Handle form submission.
 if ($action === 'setdiff' && confirm_sesskey()) {
     $cmids = optional_param_array('cmids', [], PARAM_INT);
     $difftag = optional_param('difftag', '', PARAM_ALPHANUMEXT);
@@ -51,7 +38,6 @@ if ($action === 'setdiff' && confirm_sesskey()) {
     redirect(new moodle_url('/local/autorestrict/bulk_difficulty.php', ['courseid' => $courseid]));
 }
 
-// Get all modules with their sections.
 $sql = "SELECT cm.id, cm.instance, m.name as modname, cs.section, cs.name as sectionname
         FROM {course_modules} cm
         JOIN {modules} m ON m.id = cm.module
@@ -62,12 +48,10 @@ $sql = "SELECT cm.id, cm.instance, m.name as modname, cs.section, cs.name as sec
 
 $modules = $DB->get_records_sql($sql, ['courseid' => $courseid]);
 
-// Get activity names and diff tags.
 foreach ($modules as $cm) {
     $cminfo = get_fast_modinfo($courseid)->get_cm($cm->id);
     $cm->activityname = $cminfo->name;
     
-    // Get highest diff tag for this module (diff4 > diff3 > diff2 > diff1).
     $tagsql = "SELECT t.name
                FROM {tag} t
                JOIN {tag_instance} ti ON ti.tagid = t.id
@@ -75,16 +59,14 @@ foreach ($modules as $cm) {
                AND ti.itemtype = 'course_modules'
                AND t.name IN ('diff1', 'diff2', 'diff3', 'diff4')
                ORDER BY t.name DESC";
-    $tags = $DB->get_records_sql($tagsql, ['cmid' => $cm->id], 0, 1); // Limit 1
+    $tags = $DB->get_records_sql($tagsql, ['cmid' => $cm->id], 0, 1);
     $cm->difftag = !empty($tags) ? reset($tags)->name : '';
 }
 
-// Output.
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('bulk_difficulty', 'local_autorestrict'));
 echo html_writer::tag('p', get_string('bulk_difficulty_desc', 'local_autorestrict'));
 
-// Filter by section.
 $sections = $DB->get_records('course_sections', ['course' => $courseid], 'section ASC');
 $sectionFilter = optional_param('section', -1, PARAM_INT);
 
@@ -100,23 +82,19 @@ echo html_writer::select($sectionOptions, 'section', $sectionFilter, false, ['cl
 echo html_writer::end_div();
 echo html_writer::end_tag('form');
 
-// Main form.
 echo html_writer::start_tag('form', ['method' => 'post', 'id' => 'bulk-diff-form']);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'courseid', 'value' => $courseid]);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'setdiff']);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
 
-// Action bar.
 echo html_writer::start_div('mb-3 p-3 bg-light rounded');
 echo html_writer::start_div('form-inline');
 
-// Select/deselect all.
 echo html_writer::tag('button', get_string('selectall', 'local_autorestrict'), 
     ['type' => 'button', 'class' => 'btn btn-sm btn-outline-secondary mr-2', 'onclick' => 'selectAll(true)']);
 echo html_writer::tag('button', get_string('deselectall', 'local_autorestrict'), 
     ['type' => 'button', 'class' => 'btn btn-sm btn-outline-secondary mr-3', 'onclick' => 'selectAll(false)']);
 
-// Difficulty selector.
 echo html_writer::label(get_string('set_to', 'local_autorestrict') . ': ', 'difftag', true, ['class' => 'mr-2']);
 $diffOptions = [
     '' => get_string('no_difficulty', 'local_autorestrict'),
@@ -133,7 +111,6 @@ echo html_writer::tag('button', get_string('apply', 'local_autorestrict'),
 echo html_writer::end_div();
 echo html_writer::end_div();
 
-// Activities table.
 $table = new html_table();
 $table->head = [
     html_writer::checkbox('selectall', 1, false, '', ['onclick' => 'selectAll(this.checked)']),
@@ -147,12 +124,10 @@ $table->id = 'activities-table';
 
 $currentSection = -1;
 foreach ($modules as $cm) {
-    // Filter by section.
     if ($sectionFilter >= 0 && $cm->section != $sectionFilter) {
         continue;
     }
     
-    // Section separator.
     if ($cm->section != $currentSection) {
         $currentSection = $cm->section;
     }
@@ -161,7 +136,6 @@ foreach ($modules as $cm) {
     
     $sectionName = $cm->sectionname ?: get_string('section') . ' ' . $cm->section;
     
-    // Current difficulty badge (highest only).
     $diffBadge = '-';
     if (!empty($cm->difftag)) {
         $badgeClass = 'badge-secondary';
@@ -189,7 +163,6 @@ if (empty($table->data)) {
 
 echo html_writer::end_tag('form');
 
-// Back button.
 echo html_writer::tag('p', 
     html_writer::link(
         new moodle_url('/local/autorestrict/course_settings.php', ['courseid' => $courseid]),
@@ -198,7 +171,6 @@ echo html_writer::tag('p',
     )
 );
 
-// JavaScript.
 echo html_writer::script("
 function selectAll(checked) {
     document.querySelectorAll('.activity-checkbox').forEach(function(cb) {

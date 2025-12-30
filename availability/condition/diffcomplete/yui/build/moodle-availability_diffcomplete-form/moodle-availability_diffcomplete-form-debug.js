@@ -17,7 +17,6 @@ M.availability_diffcomplete.form.initInner = function(counts, numLevels, prefix)
 M.availability_diffcomplete.form.getNode = function(json) {
     var html = '<div class="availability_diffcomplete-fields">';
     
-    // Generate fields dynamically based on numLevels
     for (var i = 1; i <= this.numLevels; i++) {
         var tagname = this.prefix + i;
         var count = this.counts[tagname] || 0;
@@ -58,7 +57,6 @@ M.availability_diffcomplete.form.fillValue = function(value, node) {
 };
 
 M.availability_diffcomplete.form.fillErrors = function(errors, node) {
-    // No required fields - at least one should be > 0 but not strictly required
 };
 
 }, '@VERSION@', {"requires": ["base", "node", "event", "moodle-core_availability-form"]});

@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for auto restrict access
- *
- * @package    local_autorestrict
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Tự động hạn chế truy cập';
 $string['autorestrict:manage'] = 'Quản lý cài đặt tự động hạn chế';
 
@@ -59,11 +51,9 @@ $string['section_min_diff3_for_diff4'] = 'Số lượng hoàn thành Diff3 để
 $string['error_negative'] = 'Giá trị không thể là số âm.';
 $string['error_grade_range'] = 'Điểm phải nằm trong khoảng từ 0 đến 100.';
 
-// Auto apply/clear messages.
 $string['auto_applied'] = 'Các hạn chế đã được tự động áp dụng: {$a->applied} hoạt động được cập nhật, {$a->skipped} bị bỏ qua.';
 $string['auto_cleared'] = 'Các hạn chế đã được tự động xóa: {$a->modules} hoạt động, {$a->sections} chương.';
 
-// Bulk difficulty page.
 $string['bulk_difficulty'] = 'Thiết lập độ khó hàng loạt';
 $string['bulk_difficulty_desc'] = 'Chọn các hoạt động và gán cấp độ khó. Các hoạt động có nhiều thẻ độ khó sẽ sử dụng cấp độ cao nhất.';
 $string['filter_section'] = 'Lọc theo chương';

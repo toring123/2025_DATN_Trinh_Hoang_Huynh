@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for section grade condition
- *
- * @package    availability_sectiongrade
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Restriction by section average grade';
 $string['title'] = 'Section Grade';
 $string['description'] = 'Require students to achieve a minimum average grade in a specific section.';

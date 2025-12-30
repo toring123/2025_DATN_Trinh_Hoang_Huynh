@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for auto restrict access
- *
- * @package    local_autorestrict
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Auto Restrict Access';
 $string['autorestrict:manage'] = 'Manage auto restrict settings';
 
@@ -59,11 +51,9 @@ $string['section_min_diff3_for_diff4'] = 'Diff3 completions to unlock Diff4 (sec
 $string['error_negative'] = 'Value cannot be negative.';
 $string['error_grade_range'] = 'Grade must be between 0 and 100.';
 
-// Auto apply/clear messages.
 $string['auto_applied'] = 'Restrictions automatically applied: {$a->applied} activities updated, {$a->skipped} skipped.';
 $string['auto_cleared'] = 'Restrictions automatically cleared: {$a->modules} activities, {$a->sections} sections.';
 
-// Bulk difficulty page.
 $string['bulk_difficulty'] = 'Bulk Set Difficulty';
 $string['bulk_difficulty_desc'] = 'Select activities and assign difficulty levels. Activities with multiple difficulty tags will use the highest level.';
 $string['filter_section'] = 'Filter by section';

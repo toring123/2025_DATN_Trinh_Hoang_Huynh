@@ -13,28 +13,24 @@ M.availability_diffcomplete.form.initInner = function(counts) {
 M.availability_diffcomplete.form.getNode = function(json) {
     var html = '<div class="availability_diffcomplete-fields">';
     
-    // Diff1
     html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
             M.util.get_string('diff1', 'availability_diffcomplete') + 
             ' (' + this.counts.diff1 + ' available)</span> ' +
             '<input type="number" class="form-control" name="diff1" min="0" ' +
             'value="' + (json.diff1 || 0) + '" style="width: 80px;"/></label>';
     
-    // Diff2
     html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
             M.util.get_string('diff2', 'availability_diffcomplete') + 
             ' (' + this.counts.diff2 + ' available)</span> ' +
             '<input type="number" class="form-control" name="diff2" min="0" ' +
             'value="' + (json.diff2 || 0) + '" style="width: 80px;"/></label>';
     
-    // Diff3
     html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
             M.util.get_string('diff3', 'availability_diffcomplete') + 
             ' (' + this.counts.diff3 + ' available)</span> ' +
             '<input type="number" class="form-control" name="diff3" min="0" ' +
             'value="' + (json.diff3 || 0) + '" style="width: 80px;"/></label>';
     
-    // Diff4
     html += '<label class="form-inline d-block mb-1"><span class="pr-3">' + 
             M.util.get_string('diff4', 'availability_diffcomplete') + 
             ' (' + this.counts.diff4 + ' available)</span> ' +
@@ -66,7 +62,6 @@ M.availability_diffcomplete.form.fillValue = function(value, node) {
 };
 
 M.availability_diffcomplete.form.fillErrors = function(errors, node) {
-    // No required fields - at least one should be > 0 but not strictly required
 };
 
 }, '@VERSION@', {"requires": ["base", "node", "event", "moodle-core_availability-form"]});

@@ -1,42 +1,27 @@
 <?php
 declare(strict_types=1);
-
-/**
- * Grading progress page for teachers to view AI grading status.
- *
- * @package    local_autograding
- * @copyright  2025 Nguyen Huu Trinh
- */
-
 require_once(__DIR__ . '/../../config.php');
 
 use local_autograding\grading_status;
 
-// Get course module ID.
 $cmid = required_param('cmid', PARAM_INT);
 
-// Get the course module and context.
 $cm = get_coursemodule_from_id('assign', $cmid, 0, false, MUST_EXIST);
 $course = $DB->get_record('course', ['id' => $cm->course], '*', MUST_EXIST);
 $context = context_module::instance($cm->id);
 
-// Require login and check capability with graceful handling.
 require_login($course, false, $cm);
 
-// Check capability - redirect instead of throwing exception with stack trace.
 if (!has_capability('mod/assign:grade', $context)) {
     $assignurl = new moodle_url('/mod/assign/view.php', ['id' => $cmid]);
     redirect($assignurl, get_string('nopermissions', 'error', get_string('grading_progress_title', 'local_autograding')), null, \core\output\notification::NOTIFY_ERROR);
 }
 
-
-// Check if autograding is enabled.
 $autogradingconfig = $DB->get_record('local_autograding', ['cmid' => $cmid]);
 if (!$autogradingconfig || (int) $autogradingconfig->autograding_option === 0) {
     throw new moodle_exception('autograding_disabled', 'local_autograding');
 }
 
-// Set up page.
 $PAGE->set_url('/local/autograding/grading_progress.php', ['cmid' => $cmid]);
 $PAGE->set_context($context);
 $PAGE->set_cm($cm);
@@ -44,20 +29,16 @@ $PAGE->set_title(get_string('grading_progress_title', 'local_autograding'));
 $PAGE->set_heading($course->fullname);
 $PAGE->navbar->add(get_string('grading_progress_title', 'local_autograding'));
 
-// Get assignment name.
 $assign = $DB->get_record('assign', ['id' => $cm->instance], '*', MUST_EXIST);
 
-// Get all status records for this assignment.
 $autograding_status = grading_status::get_all_for_assignment($cmid);
 
 $summary = grading_status::get_summary($cmid);
 
-// Output page.
 echo $OUTPUT->header();
 
 echo $OUTPUT->heading(get_string('grading_progress_title', 'local_autograding') . ': ' . $assign->name);
 
-// Summary cards.
 echo '<div class="row mb-4">';
 echo '<div class="col-md-3"><div class="card bg-warning text-white"><div class="card-body text-center">';
 echo '<h3 id="summary-pending">' . $summary[grading_status::STATUS_PENDING] . '</h3>';
@@ -80,14 +61,11 @@ echo '<p class="mb-0">' . get_string('status_failed', 'local_autograding') . '</
 echo '</div></div></div>';
 echo '</div>';
 
-// Auto-refresh info.
 echo '<p class="text-muted small">' . get_string('auto_refresh_info', 'local_autograding') . '</p>';
 
-// Status table.
 if (empty($autograding_status)) {
     echo $OUTPUT->notification(get_string('no_submissions_yet', 'local_autograding'), 'info');
 } else {
-    // Build table manually for better control over data attributes.
     echo '<table class="table table-striped table-hover" id="grading-status-table">';
     echo '<thead><tr>';
     echo '<th>' . get_string('student', 'local_autograding') . '</th>';
@@ -102,7 +80,6 @@ if (empty($autograding_status)) {
     foreach ($autograding_status as $record) {
         $studentname = fullname($record);
 
-        // Status badge.
         switch ($record->status) {
             case grading_status::STATUS_PENDING:
                 $statusbadge = '<span class="badge badge-warning">' . get_string('status_pending', 'local_autograding') . '</span>';
@@ -120,10 +97,8 @@ if (empty($autograding_status)) {
                 $statusbadge = '<span class="badge badge-secondary">' . $record->status . '</span>';
         }
 
-        // Time.
         $timestr = userdate($record->timemodified, get_string('strftimedatetimeshort', 'langconfig'));
 
-        // Error message (truncated).
         $errormsg = $record->error_message ?? '-';
         if (strlen($errormsg) > 50) {
             $errormsg = '<span title="' . s($record->error_message) . '">' . s(substr($errormsg, 0, 50)) . '...</span>';
@@ -131,7 +106,6 @@ if (empty($autograding_status)) {
             $errormsg = s($errormsg);
         }
 
-        // Actions.
         $actions = '';
 
         if ($record->status === grading_status::STATUS_FAILED) {
@@ -154,7 +128,6 @@ if (empty($autograding_status)) {
                 get_string('view_grade', 'local_autograding') . '</a>';
         }
 
-        // Row with data attribute.
         echo '<tr data-submissionid="' . $record->submissionid . '" data-userid="' . $record->userid . '">';
         echo '<td class="student-cell">' . $studentname . '</td>';
         echo '<td class="status-cell">' . $statusbadge . '</td>';
@@ -168,18 +141,15 @@ if (empty($autograding_status)) {
     echo '</tbody></table>';
 }
 
-// Back button.
 $backurl = new moodle_url('/mod/assign/view.php', ['id' => $cmid, 'action' => 'grading']);
 echo '<p><a href="' . $backurl . '" class="btn btn-secondary">' . get_string('back_to_grading', 'local_autograding') . '</a></p>';
 
-// JavaScript for retry button and smooth AJAX polling.
 $PAGE->requires->js_amd_inline("
     require(['jquery'], function($) {
         var cmid = " . $cmid . ";
-        var pollIntervalFast = 3000; // 3 seconds when active
-        var pollIntervalSlow = 30000; // 30 seconds when idle
+        var pollIntervalFast = 3000;
+        var pollIntervalSlow = 30000;
 
-        // Status badge classes mapping.
         var statusBadges = {
             'pending': '<span class=\"badge badge-warning\">" . get_string('status_pending', 'local_autograding') . "</span>',
             'processing': '<span class=\"badge badge-info\">" . get_string('status_processing', 'local_autograding') . "</span>',
@@ -187,7 +157,6 @@ $PAGE->requires->js_amd_inline("
             'failed': '<span class=\"badge badge-danger\">" . get_string('status_failed', 'local_autograding') . "</span>'
         };
 
-        // Update summary cards.
         function updateSummary(summary) {
             $('#summary-pending').text(summary.pending);
             $('#summary-processing').text(summary.processing);
@@ -195,36 +164,28 @@ $PAGE->requires->js_amd_inline("
             $('#summary-failed').text(summary.failed);
         }
 
-        // Update table row.
         function updateRow(record) {
             var row = $('tr[data-submissionid=\"' + record.submissionid + '\"]');
             if (row.length === 0) {
-                // New record - reload page to add it.
                 location.reload();
                 return;
             }
 
-            // Update status badge.
             row.find('.status-cell').html(statusBadges[record.status] || record.status);
 
-            // Update attempts.
             row.find('.attempts-cell').text(record.attempts);
 
-            // Update time.
             row.find('.time-cell').text(record.timemodified_formatted);
 
-            // Update error message.
             var errormsg = record.error_message || '-';
             if (errormsg.length > 50) {
                 errormsg = '<span title=\"' + errormsg + '\">' + errormsg.substring(0, 50) + '...</span>';
             }
             row.find('.error-cell').html(errormsg);
 
-            // Update actions based on status.
             var actionsCell = row.find('.actions-cell');
             if (record.status === 'failed') {
                 if (actionsCell.find('.retry-btn').length === 0) {
-                    // Add retry and grade manually buttons.
                     actionsCell.html(
                         '<button class=\"btn btn-sm btn-primary retry-btn\" data-submissionid=\"' + record.submissionid + '\">" . get_string('retry', 'local_autograding') . "</button> ' +
                         '<a href=\"' + M.cfg.wwwroot + '/mod/assign/view.php?id=' + cmid + '&action=grader&userid=' + record.userid + '\" class=\"btn btn-sm btn-secondary\">" . get_string('grade_manually', 'local_autograding') . "</a>'
@@ -240,7 +201,6 @@ $PAGE->requires->js_amd_inline("
             }
         }
 
-        // Bind retry handler to button.
         function bindRetryHandler(btn) {
             btn.on('click', function() {
                 var button = $(this);
@@ -257,7 +217,6 @@ $PAGE->requires->js_amd_inline("
                     dataType: 'json',
                     success: function(response) {
                         if (response.success) {
-                            // Trigger immediate poll to update UI.
                             pollStatus();
                         } else {
                             alert(response.error || 'Retry failed');
@@ -272,7 +231,6 @@ $PAGE->requires->js_amd_inline("
             });
         }
 
-        // Poll for status updates.
         function pollStatus() {
             $.ajax({
                 url: M.cfg.wwwroot + '/local/autograding/ajax/get_status.php',
@@ -286,7 +244,6 @@ $PAGE->requires->js_amd_inline("
                             updateRow(record);
                         });
 
-                        // Adaptive polling: fast when active, slow when idle.
                         var hasActiveTasks = response.summary.pending > 0 || response.summary.processing > 0;
                         if (hasActiveTasks) {
                             currentInterval = pollIntervalFast;
@@ -299,22 +256,18 @@ $PAGE->requires->js_amd_inline("
                     console.error('[Autograding] AJAX error:', status, error);
                 },
                 complete: function() {
-                    // Schedule next poll with current interval.
                     setTimeout(pollStatus, currentInterval);
                 }
             });
         }
 
-        // Bind retry handlers to existing buttons.
         $('.retry-btn').each(function() {
             bindRetryHandler($(this));
         });
 
-        // Check if there are active tasks initially.
         var hasInitialActive = " . ($summary[grading_status::STATUS_PENDING] + $summary[grading_status::STATUS_PROCESSING]) . " > 0;
         var currentInterval = hasInitialActive ? pollIntervalFast : pollIntervalSlow;
 
-        // Start polling after initial delay.
         setTimeout(pollStatus, currentInterval);
     });
 ");

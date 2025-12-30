@@ -1,20 +1,10 @@
 <?php
 declare(strict_types=1);
-
-/**
- * English language strings for local_autograding plugin.
- *
- * @package    local_autograding
- * @copyright  2025 Your Name
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Auto grading';
 $string['privacy:metadata'] = 'The Auto grading plugin does not store any personal data.';
 
-// Form elements.
 $string['autograding_header'] = 'Cài đặt chấm điểm tự động';
 $string['autograding_label'] = 'Kiểu chấm điểm';
 $string['autograding_label_help'] = 'Select the auto grading option for this assignment:
@@ -23,25 +13,21 @@ $string['autograding_label_help'] = 'Select the auto grading option for this ass
 * **Grading with text answer**: Automatic grading based on text submissions (requires answer text)
 * **Grading with file answer**: Automatic grading based on PDF file submissions (requires PDF upload)';
 
-// Text answer field.
 $string['text_answer_label'] = 'Text Answer';
 $string['text_answer_label_help'] = 'Enter the expected text answer for automatic grading. This field is required when "Grading with text answer" is selected. The text entered here will be used as the reference answer for comparing student submissions.';
 $string['text_answer_required'] = 'Text answer is required when "Grading with text answer" is selected.';
 
-// File answer field.
 $string['file_answer_label'] = 'Answer File';
 $string['file_answer_label_help'] = 'Upload a PDF or image file containing the reference answer for automatic grading. This field is required when "Grading with file answer" is selected. The text will be automatically extracted and stored for comparison with student submissions. Accepted formats: PDF, JPG, JPEG, PNG, GIF, WEBP (max 10MB).';
 $string['file_answer_required'] = 'Answer file is required when "Grading with file answer" is selected.';
 $string['file_answer_pdf_only'] = 'Only PDF files are accepted for the answer file.';
 $string['file_answer_invalid_type'] = 'Only PDF and image files (jpg, jpeg, png, gif, webp) are accepted.';
 
-// Options.
 $string['option_notuse'] = 'Not use';
 $string['option_without_answer'] = 'Grading without answer';
 $string['option_with_text'] = 'Grading with text answer';
 $string['option_with_file'] = 'Grading with file answer';
 
-// Gemini API Settings.
 $string['gemini_settings_header'] = 'Google Gemini AI Settings';
 $string['gemini_settings_desc'] = 'Configure the Google Gemini API for automatic grading. You need a valid API key from Google AI Studio (https://aistudio.google.com/).';
 $string['gemini_api_key'] = 'Gemini API Key';
@@ -49,7 +35,6 @@ $string['gemini_api_key_desc'] = 'Enter your Google Gemini API key. This key is 
 $string['gemini_model'] = 'Gemini Model';
 $string['gemini_model_desc'] = 'Select the Gemini model to use for grading. Gemini 2.5 Flash is recommended for balance of speed and quality.';
 
-// AI Provider Settings.
 $string['ai_provider_header'] = 'AI Provider Settings';
 $string['ai_provider_header_desc'] = 'Configure the AI provider for automatic grading. You can choose between Google Gemini (cloud) or Local Qwen (self-hosted).';
 $string['ai_provider'] = 'AI Provider';
@@ -57,7 +42,6 @@ $string['ai_provider_desc'] = 'Select the AI provider to use for automatic gradi
 $string['provider_gemini'] = 'Google Gemini (Cloud)';
 $string['provider_qwen'] = 'Local Qwen (Self-hosted)';
 
-// System Instruction Settings.
 $string['system_instruction'] = 'System Instruction';
 $string['system_instruction_desc'] = 'Define the AI persona and behavior for grading. This instruction will be sent to the AI as a system message to guide how it should grade submissions.';
 $string['system_instruction_default'] = '
@@ -83,7 +67,6 @@ YÊU CẦU ĐẦU RA (JSON Strict Mode):
   "explanation": "<Nhận xét chi tiết. Sử dụng ký tự \\n để xuống dòng giữa các ý, Nếu đề bài có nhiều câu thì hãy giải thích cho từng câu và ngăn cách bởi ký tự \\n. Ví dụ: \"Ý 1 đúng.\\nTuy nhiên ý 2 còn thiếu.\">"
 }';
 
-// Local Qwen Settings.
 $string['qwen_settings_header'] = 'Local Qwen AI Settings';
 $string['qwen_settings_desc'] = 'Configure the local Qwen AI endpoint for automatic grading. This requires a self-hosted Qwen model with OpenAI-compatible API.';
 $string['qwen_endpoint'] = 'Qwen Endpoint URL';
@@ -91,10 +74,8 @@ $string['qwen_endpoint_desc'] = 'Enter the URL of your local Qwen API endpoint. 
 $string['qwen_model'] = 'Qwen Model';
 $string['qwen_model_desc'] = 'Select the Qwen model to use for grading.';
 
-// Dynamic model fetching strings.
 $string['refresh_page_for_models'] = '(Save settings and refresh page to update available models from API)';
 
-// Auto-grading messages.
 $string['autograding_disabled'] = 'Auto-grading is not enabled for this assignment.';
 $string['autograding_no_api_key'] = 'Gemini API key is not configured. Please contact the administrator.';
 $string['autograding_api_error'] = 'Error communicating with Gemini API: {$a}';
@@ -104,27 +85,22 @@ $string['autograding_no_submission'] = 'No submission content found to grade.';
 $string['autograding_no_reference'] = 'No reference answer configured for this assignment.';
 $string['autograding_feedback_prefix'] = '[AI Auto-Grading]';
 
-// Adhoc task strings.
 $string['task_grade_submission'] = 'Process auto-grading for assignment submission';
 $string['ratelimited'] = 'API rate limit exceeded';
 $string['locktimeout'] = 'Could not acquire lock for API call';
 
-// Image grading strings (for Qwen provider limitations).
 $string['qwen_image_warning'] = '[Note: Image(s) were submitted but could not be processed by Local Qwen. Only text content was graded. For image/handwriting grading, please use Gemini provider.]';
 $string['qwen_image_only_error'] = 'This submission contains only image files, but the Local Qwen provider cannot process images. Please switch to Gemini provider for image/handwriting grading, or ask the student to resubmit in text format.';
 
-// OCR Server Settings.
 $string['ocr_settings_header'] = 'OCR Server Settings';
 $string['ocr_settings_desc'] = 'Configure the OCR server for extracting text from PDFs and images before grading. Leave empty to use built-in parsers (for PDF/DOCX) or Vision API (for images).';
 $string['ocr_server_url'] = 'OCR Server URL';
 $string['ocr_server_url_desc'] = 'The URL of the OCR server (e.g., http://127.0.0.1:8001). When configured, PDFs and images will be sent to this server for text extraction.';
 $string['ocr_api_error'] = 'Error communicating with OCR server: {$a}';
 
-// Dynamic model fetching strings.
 $string['no_model_available'] = '--No model--';
 $string['fetching_models'] = 'Fetching models...';
 
-// Grading progress page strings.
 $string['grading_progress_title'] = 'AI Grading Progress';
 $string['status_pending'] = 'Pending';
 $string['status_processing'] = 'Processing';
@@ -144,10 +120,8 @@ $string['back_to_grading'] = 'Back to Grading';
 $string['no_submissions_yet'] = 'No submissions have been queued for AI grading yet.';
 $string['auto_refresh_info'] = 'This page auto-refreshes every 10 seconds.';
 
-// Scheduled task.
 $string['task_send_failure_digest'] = 'Send daily digest of failed grading attempts';
 
-// Notification/digest strings.
 $string['messageprovider:grading_failure'] = 'Grading failure notifications';
 $string['digest_subject'] = 'AI Grading Failures: {$a}';
 $string['digest_small'] = '{$a} submissions failed AI grading';
@@ -158,14 +132,11 @@ Students affected: {$a->students}{$a->more}
 View progress and retry: {$a->url}';
 $string['and_more'] = ' and {$a} more';
 
-// Capability strings.
 $string['autograding:viewprogress'] = 'View AI grading progress';
 $string['autograding:manage'] = 'Manage autograding settings';
 
-// Server error.
 $string['servererror'] = 'Server error occurred';
 
-// Connection check strings.
 $string['check_connection'] = 'Check Connection';
 $string['checking_connection'] = 'Checking...';
 $string['connection_success'] = 'Connection successful';

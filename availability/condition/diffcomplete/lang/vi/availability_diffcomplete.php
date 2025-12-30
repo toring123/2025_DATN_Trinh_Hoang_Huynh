@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for difficulty completion condition
- *
- * @package    availability_diffcomplete
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Hạn chế theo hoàn thành độ khó';
 $string['title'] = 'Hoàn thành độ khó';
 $string['description'] = 'Yêu cầu học viên hoàn thành một số lượng hoạt động tối thiểu cho mỗi cấp độ khó.';

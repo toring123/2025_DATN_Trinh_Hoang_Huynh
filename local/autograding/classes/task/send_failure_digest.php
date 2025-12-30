@@ -1,44 +1,24 @@
 <?php
 declare(strict_types=1);
-
-/**
- * Scheduled task to send daily digest of failed grading attempts.
- *
- * @package    local_autograding
- * @copyright  2025 Nguyen Huu Trinh
- */
-
 namespace local_autograding\task;
 
 use local_autograding\grading_status;
 
 defined('MOODLE_INTERNAL') || die();
 
-/**
- * Scheduled task that sends a daily digest of failed grading attempts to teachers.
- */
 class send_failure_digest extends \core\task\scheduled_task
 {
-    /**
-     * Get task name.
-     *
-     * @return string
-     */
     public function get_name(): string
     {
         return get_string('task_send_failure_digest', 'local_autograding');
     }
 
-    /**
-     * Execute the task.
-     */
     public function execute(): void
     {
         global $DB;
 
         mtrace("[FAILURE DIGEST] Starting failure digest task...");
 
-        // Get failures from last 24 hours.
         $since = time() - (24 * 60 * 60);
         $failedrecords = grading_status::get_failed_for_digest($since);
 
@@ -49,7 +29,6 @@ class send_failure_digest extends \core\task\scheduled_task
 
         mtrace("[FAILURE DIGEST] Found " . count($failedrecords) . " failed submissions.");
 
-        // Group by course and assignment.
         $grouped = [];
         foreach ($failedrecords as $record) {
             $key = $record->course . '_' . $record->cmid;
@@ -63,7 +42,6 @@ class send_failure_digest extends \core\task\scheduled_task
             $grouped[$key]['failures'][] = $record;
         }
 
-        // Send notifications to course teachers.
         foreach ($grouped as $group) {
             $this->send_notification_to_teachers($group);
         }
@@ -71,11 +49,6 @@ class send_failure_digest extends \core\task\scheduled_task
         mtrace("[FAILURE DIGEST] Digest notifications sent.");
     }
 
-    /**
-     * Send notification to teachers of a course about failed grading.
-     *
-     * @param array $group Group data with courseid, cmid, and failures
-     */
     private function send_notification_to_teachers(array $group): void
     {
         global $DB;
@@ -84,7 +57,6 @@ class send_failure_digest extends \core\task\scheduled_task
         $cmid = $group['cmid'];
         $failures = $group['failures'];
 
-        // Get course and assignment info.
         $course = $DB->get_record('course', ['id' => $courseid]);
         $cm = get_coursemodule_from_id('assign', $cmid, 0, false, IGNORE_MISSING);
         if (!$course || !$cm) {
@@ -96,7 +68,6 @@ class send_failure_digest extends \core\task\scheduled_task
             return;
         }
 
-        // Get teachers enrolled in the course.
         $context = \context_course::instance($courseid);
         $teachers = get_enrolled_users($context, 'mod/assign:grade');
 
@@ -105,7 +76,6 @@ class send_failure_digest extends \core\task\scheduled_task
             return;
         }
 
-        // Build message.
         $failurecount = count($failures);
         $studentnames = [];
         foreach ($failures as $failure) {
@@ -123,7 +93,6 @@ class send_failure_digest extends \core\task\scheduled_task
             'url' => $progressurl->out(false),
         ]);
 
-        // Send to each teacher.
         foreach ($teachers as $teacher) {
             $message = new \core\message\message();
             $message->component = 'local_autograding';

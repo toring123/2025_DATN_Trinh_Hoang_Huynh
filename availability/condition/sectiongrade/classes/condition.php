@@ -1,22 +1,12 @@
 <?php
-/**
- * Availability condition based on section average grade
- *
- * @package    availability_sectiongrade
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace availability_sectiongrade;
 
 defined('MOODLE_INTERNAL') || die();
 
 class condition extends \core_availability\condition {
 
-    /** @var int Section number */
     protected $sectionnumber;
 
-    /** @var float Minimum average grade required (percentage) */
     protected $mingrade;
 
     public function __construct($structure) {
@@ -33,8 +23,6 @@ class condition extends \core_availability\condition {
     }
 
     public function is_available($not, \core_availability\info $info, $grabthelot, $userid) {
-        // Tận dụng logic của filter_user_list để tránh viết lặp code
-        // Tạo mảng giả lập 1 user để check
         $users = [$userid => true]; 
         $filtered = $this->filter_user_list($users, $not, $info, null);
         
@@ -45,10 +33,6 @@ class condition extends \core_availability\condition {
         return true;
     }
 
-    /**
-     * Hàm lọc danh sách user đã được tối ưu hiệu năng (Bulk processing)
-     * Chỉ tính trung bình các bài user NHÌN THẤY ĐƯỢC và ĐÃ ĐƯỢC CHẤM ĐIỂM
-     */
     public function filter_user_list(array $users, $not, \core_availability\info $info, ?\core_availability\capability_checker $checker = null) {
         global $DB;
 
@@ -59,11 +43,9 @@ class condition extends \core_availability\condition {
         $course = $info->get_course();
         $userids = array_keys($users);
         
-        // Phải tính riêng cho từng user vì uservisible khác nhau
         $result = [];
         
         foreach ($users as $userid => $user) {
-            // Cache per-user modinfo to avoid repeated loads if same user appears
             static $modinfoCache = [];
             if (!isset($modinfoCache[$userid])) {
                 $modinfoCache[$userid] = get_fast_modinfo($course, $userid);

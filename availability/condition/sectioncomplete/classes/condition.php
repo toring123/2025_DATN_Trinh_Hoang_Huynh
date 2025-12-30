@@ -1,29 +1,14 @@
 <?php
-/**
- * Availability condition based on section completion count
- *
- * @package    availability_sectioncomplete
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace availability_sectioncomplete;
 
 defined('MOODLE_INTERNAL') || die();
 
 class condition extends \core_availability\condition {
     
-    /** @var int Section number */
     protected $sectionnumber;
     
-    /** @var int Minimum completions required */
     protected $mincompletions;
     
-    /**
-     * Constructor
-     *
-     * @param \stdClass $structure Data structure from JSON decode
-     */
     public function __construct($structure) {
         if (isset($structure->section)) {
             $this->sectionnumber = (int)$structure->section;
@@ -35,11 +20,6 @@ class condition extends \core_availability\condition {
         }
     }
     
-    /**
-     * Save the data
-     *
-     * @return \stdClass Structure to save
-     */
     public function save() {
         return (object)[
             'type' => 'sectioncomplete',
@@ -48,43 +28,17 @@ class condition extends \core_availability\condition {
         ];
     }
     
-    /**
-     * Check if user is available
-     *
-     * @param bool $not Set true if we are inverting the condition
-     * @param \core_availability\info $info Item we're checking
-     * @param bool $grabthelot Performance hint
-     * @param int $userid User ID to check availability for
-     * @return bool True if available
-     */
     public function is_available($not, \core_availability\info $info, $grabthelot, $userid) {
-        // Reuse bulk path to keep logic identical and avoid extra DB calls.
         $users = [$userid => true];
         $filtered = $this->filter_user_list($users, $not, $info, null);
         return array_key_exists($userid, $filtered);
     }
     
-    /**
-     * Get the number of completed activities in a section
-     *
-     * @param int $courseid Course ID
-     * @param int $sectionnumber Section number
-     * @param int $userid User ID
-     * @return int Number of completed activities
-     */
     protected function get_section_completion_count($courseid, $sectionnumber, $userid) {
-        // Kept for compatibility; reuse bulk function for a single user
         $counts = $this->bulk_section_completion_counts($courseid, $sectionnumber, [$userid]);
         return (int)($counts[$userid] ?? 0);
     }
     
-    /**
-     * Check if user has made a submission for this activity
-     *
-     * @param object $cm Course module object
-     * @param int $userid User ID
-     * @return bool True if user has submitted
-     */
     protected function has_user_submission($cm, $userid) {
         global $DB;
         
@@ -163,14 +117,6 @@ class condition extends \core_availability\condition {
         }
     }
     
-    /**
-     * Get description of restriction
-     *
-     * @param bool $full Set true if this is the 'full information' view
-     * @param bool $not Set true if we are inverting the condition
-     * @param \core_availability\info $info Item we're checking
-     * @return string Information string about restriction
-     */
     public function get_description($full, $not, \core_availability\info $info) {
         if ($not) {
             return get_string('requires_notcomplete', 'availability_sectioncomplete', 
@@ -181,33 +127,14 @@ class condition extends \core_availability\condition {
         }
     }
     
-    /**
-     * Get debug string
-     *
-     * @return string Debug string
-     */
     protected function get_debug_string() {
         return 'section:' . $this->sectionnumber . ' min:' . $this->mincompletions;
     }
     
-    /**
-     * Check if this condition applies to user lists
-     *
-     * @return bool True if this condition applies to user lists
-     */
     public function is_applied_to_user_lists() {
         return true;
     }
     
-    /**
-     * Filter the user list
-     *
-     * @param array $users Array of users
-     * @param bool $not True if condition is negated
-     * @param \core_availability\info $info Info about item
-     * @param \core_availability\capability_checker $checker Capability checker
-     * @return array Filtered array of users
-     */
     public function filter_user_list(array $users, $not, \core_availability\info $info,
             ?\core_availability\capability_checker $checker = null) {
         if (empty($users)) {
@@ -217,7 +144,6 @@ class condition extends \core_availability\condition {
         $course = $info->get_course();
         $userids = array_keys($users);
 
-        // Bulk compute completion counts for this section for all users at once.
         $counts = $this->bulk_section_completion_counts($course->id, $this->sectionnumber, $userids);
 
         $result = [];
@@ -237,15 +163,6 @@ class condition extends \core_availability\condition {
         return $result;
     }
 
-    /**
-     * Bulk completion count per user for a section.
-     * Counts both completion-tracking activities and non-tracking with submissions.
-     *
-     * @param int $courseid
-     * @param int $sectionnumber
-     * @param array $userids
-     * @return array userid => count
-     */
     protected function bulk_section_completion_counts(int $courseid, int $sectionnumber, array $userids): array {
         global $DB;
 
@@ -255,7 +172,6 @@ class condition extends \core_availability\condition {
 
         list($userSql, $userParams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 
-        // Part 1: completion-tracking activities
         $params = [
             'courseid' => $courseid,
             'sectionnumber' => $sectionnumber,
@@ -275,10 +191,8 @@ class condition extends \core_availability\condition {
 
         $trackingCounts = $DB->get_records_sql_menu($sql, $params);
 
-        // Part 2: completion-none activities with submissions
         $submissionCounts = $this->bulk_section_submission_counts($courseid, $sectionnumber, $userids, $userSql, $userParams);
 
-        // Merge counts
         $result = [];
         foreach ($userids as $uid) {
             $result[$uid] = (int)($trackingCounts[$uid] ?? 0) + (int)($submissionCounts[$uid] ?? 0);
@@ -287,16 +201,6 @@ class condition extends \core_availability\condition {
         return $result;
     }
 
-    /**
-     * Bulk submission counts for completion-none activities in a section.
-     *
-     * @param int $courseid
-     * @param int $sectionnumber
-     * @param array $userids
-     * @param string $userSql
-     * @param array $userParams
-     * @return array userid => count
-     */
     protected function bulk_section_submission_counts(int $courseid, int $sectionnumber, array $userids, string $userSql, array $userParams): array {
         global $DB;
 
@@ -306,7 +210,6 @@ class condition extends \core_availability\condition {
             'completionnone' => COMPLETION_TRACKING_NONE
         ];
 
-        // Fetch completion-none modules in the section
         $modules = $DB->get_records_sql("SELECT cm.id, cm.instance, m.name AS modname
                                          FROM {course_modules} cm
                                          JOIN {modules} m ON m.id = cm.module
@@ -474,7 +377,6 @@ class condition extends \core_availability\condition {
             }
         }
 
-        // Ensure all users appear in result
         foreach ($userids as $uid) {
             if (!isset($aggregate[$uid])) {
                 $aggregate[$uid] = 0;

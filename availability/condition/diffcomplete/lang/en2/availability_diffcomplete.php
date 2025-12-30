@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for difficulty completion condition
- *
- * @package    availability_diffcomplete
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Restriction by difficulty completion';
 $string['title'] = 'Difficulty Completion';
 $string['description'] = 'Require students to complete a minimum number of activities for each difficulty level.';

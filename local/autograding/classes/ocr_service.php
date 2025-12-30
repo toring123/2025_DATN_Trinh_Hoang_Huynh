@@ -1,25 +1,11 @@
 <?php
 declare(strict_types=1);
-
-/**
- * OCR Service class for local_autograding plugin.
- *
- * Handles text extraction from files (PDF, DOCX, images) via OCR server.
- *
- * @package    local_autograding
- * @copyright  2025 Nguyen Huu Trinh
- */
-
 namespace local_autograding;
 
 defined('MOODLE_INTERNAL') || die();
 
-/**
- * OCR Service class for text extraction.
- */
 class ocr_service
 {
-    /** @var array Supported image MIME types for OCR text extraction */
     public const SUPPORTED_IMAGE_MIMETYPES = [
         'image/jpeg',
         'image/png',
@@ -27,37 +13,20 @@ class ocr_service
         'image/heic',
     ];
 
-    /**
-     * Check if OCR server is configured and enabled.
-     *
-     * @return bool True if OCR server is enabled
-     */
     public static function is_enabled(): bool
     {
         $ocrServerUrl = get_config('local_autograding', 'ocr_server_url');
         return !empty($ocrServerUrl);
     }
 
-    /**
-     * Get the OCR server URL.
-     *
-     * @return string|null The OCR server URL or null if not configured
-     */
     public static function get_server_url(): ?string
     {
         $url = get_config('local_autograding', 'ocr_server_url');
         return !empty($url) ? $url : null;
     }
 
-    /**
-     * Check connection to OCR server.
-     *
-     * @param string|null $endpoint Optional endpoint URL override. If null, uses configured URL.
-     * @return array Connection status result with keys: success, message, details
-     */
     public static function check_connection(?string $endpoint = null): array
     {
-        // Use provided endpoint or get from config.
         if (empty($endpoint)) {
             $endpoint = self::get_server_url();
         }
@@ -65,7 +34,6 @@ class ocr_service
             $endpoint = 'http://127.0.0.1:8001';
         }
 
-        // Try to connect to OCR server health endpoint.
         $healthurl = rtrim($endpoint, '/') . '/health';
 
         $curl = curl_init();
@@ -100,7 +68,6 @@ class ocr_service
 
         $data = json_decode($response, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
-            // Even if response is not JSON, if HTTP 200 then server is up.
             return [
                 'success' => true,
                 'message' => get_string('connection_success', 'local_autograding'),
@@ -115,15 +82,6 @@ class ocr_service
         ];
     }
 
-    /**
-     * Extract text from all submission files.
-     *
-     * Routes files to appropriate extraction method based on type.
-     *
-     * @param object $submission The submission record
-     * @param int $assignid Assignment ID
-     * @return string Extracted text from all files
-     */
     public static function extract_from_submission(object $submission, int $assignid): string
     {
         $fs = get_file_storage();
@@ -149,7 +107,6 @@ class ocr_service
 
             try {
                 if ($extension === 'pdf') {
-                    // Use OCR server for PDF.
                     if ($ocrEnabled) {
                         mtrace("[OCR SERVICE] Using OCR server for PDF: {$filename}");
                         $text = self::call_ocr_api($file, 'pdf');
@@ -170,7 +127,6 @@ class ocr_service
                         $extractedText[] = trim($text);
                     }
                 } else if ($ocrEnabled && in_array($mimeType, self::SUPPORTED_IMAGE_MIMETYPES, true)) {
-                    // Use OCR server for images.
                     mtrace("[OCR SERVICE] Using OCR server for image: {$filename}");
                     $text = self::call_ocr_api($file, 'image');
                     if (!empty($text)) {
@@ -185,15 +141,6 @@ class ocr_service
         return implode("\n\n", $extractedText);
     }
 
-    /**
-     * Call the OCR server to extract text from a file.
-     *
-     * Supports both image files (via /ocr endpoint) and PDF files (via /ocr-pdf endpoint).
-     *
-     * @param \stored_file $file The file to extract text from
-     * @param string $type The file type: 'image' or 'pdf'
-     * @return string|null Extracted text, or null on error
-     */
     public static function call_ocr_api(\stored_file $file, string $type): ?string
     {
         $ocrServerUrl = self::get_server_url();
@@ -203,7 +150,6 @@ class ocr_service
             return null;
         }
 
-        // Determine endpoint based on file type.
         $endpoint = ($type === 'pdf') ? '/ocr-pdf' : '/ocr';
         $url = rtrim($ocrServerUrl, '/') . $endpoint;
 
@@ -219,20 +165,16 @@ class ocr_service
 
         $tempFile = null;
         try {
-            // Create a temporary file for curl upload.
             $tempFile = tempnam(sys_get_temp_dir(), 'ocr_');
             file_put_contents($tempFile, $content);
 
-            // Use curl for multipart/form-data upload.
             $ch = curl_init();
 
             if ($type === 'pdf') {
-                // For PDF endpoint, use 'file' as field name.
                 $postFields = [
                     'file' => new \CURLFile($tempFile, $file->get_mimetype(), $filename),
                 ];
             } else {
-                // For image endpoint, use 'files[0]' as field name.
                 $postFields = [
                     'files[0]' => new \CURLFile($tempFile, $file->get_mimetype(), $filename),
                 ];
@@ -286,24 +228,16 @@ class ocr_service
             mtrace("[OCR SERVICE] OCR API exception: " . $e->getMessage());
             return null;
         } finally {
-            // Always clean up temp file.
             if ($tempFile !== null && file_exists($tempFile)) {
                 @unlink($tempFile);
             }
         }
     }
 
-    /**
-     * Extract text from a DOCX file using ZipArchive.
-     *
-     * @param \stored_file $file The stored file
-     * @return string Extracted text
-     */
     public static function extract_docx_text(\stored_file $file): string
     {
         $content = $file->get_content();
 
-        // Create temp file.
         $tempfile = tempnam(sys_get_temp_dir(), 'docx_');
         file_put_contents($tempfile, $content);
 
@@ -320,7 +254,6 @@ class ocr_service
                 return '';
             }
 
-            // Remove XML tags and get text content.
             $text = strip_tags($xml);
             $text = preg_replace('/\s+/', ' ', $text);
 
@@ -330,12 +263,6 @@ class ocr_service
         }
     }
 
-    /**
-     * Extract text from a single file based on its type.
-     *
-     * @param \stored_file $file The file to extract text from
-     * @return string|null Extracted text, or null if extraction failed
-     */
     public static function extract_from_file(\stored_file $file): ?string
     {
         $filename = $file->get_filename();
@@ -367,18 +294,8 @@ class ocr_service
         return null;
     }
 
-    /**
-     * Extract text from a PDF file stored in the answer_file area by cmid.
-     *
-     * This method retrieves files from the 'local_autograding/answer_file' file area
-     * and uses the OCR server to extract text content.
-     *
-     * @param int $cmid Course module ID
-     * @return string|null Extracted text, or null on error
-     */
     public static function extract_pdf_text_by_cmid(int $cmid): ?string
     {
-        // Get OCR server URL from config.
         $ocrServerUrl = self::get_server_url();
 
         if (empty($ocrServerUrl)) {
@@ -388,7 +305,6 @@ class ocr_service
 
         $tempFile = null;
         try {
-            // Step 1: Get the uploaded file.
             $fs = get_file_storage();
             $context = \context_system::instance();
 
@@ -399,7 +315,6 @@ class ocr_service
                 return null;
             }
 
-            // Step 2: Get the first (and only) file.
             $file = reset($files);
             $filename = $file->get_filename();
             $filecontent = $file->get_content();
@@ -409,14 +324,11 @@ class ocr_service
                 return null;
             }
 
-            // Step 3: Send file to OCR server.
             $url = rtrim($ocrServerUrl, '/') . '/ocr-pdf';
 
-            // Create a temporary file for curl upload.
             $tempFile = tempnam(sys_get_temp_dir(), 'ocr_pdf_');
             file_put_contents($tempFile, $filecontent);
 
-            // Use curl for multipart/form-data upload.
             $ch = curl_init();
 
             $postFields = [
@@ -470,7 +382,6 @@ class ocr_service
             debugging('[AUTOGRADING] ERROR: Exception during PDF extraction for cmid ' . $cmid . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
             return null;
         } finally {
-            // Always clean up temp file.
             if ($tempFile !== null && file_exists($tempFile)) {
                 @unlink($tempFile);
             }

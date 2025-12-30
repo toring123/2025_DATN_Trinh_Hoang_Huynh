@@ -1,12 +1,4 @@
 <?php
-/**
- * Upgrade script for local_autorestrict
- *
- * @package    local_autorestrict
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
 function xmldb_local_autorestrict_upgrade($oldversion) {
@@ -14,10 +6,8 @@ function xmldb_local_autorestrict_upgrade($oldversion) {
     $dbman = $DB->get_manager();
 
     if ($oldversion < 2025120200) {
-        // Define table local_autorestrict_course to be created.
         $table = new xmldb_table('local_autorestrict_course');
 
-        // Adding fields to table.
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
         $table->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
         $table->add_field('enabled', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
@@ -36,11 +26,9 @@ function xmldb_local_autorestrict_upgrade($oldversion) {
         $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
         $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
 
-        // Adding keys to table.
         $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
         $table->add_key('courseid', XMLDB_KEY_UNIQUE, ['courseid']);
 
-        // Conditionally launch create table.
         if (!$dbman->table_exists($table)) {
             $dbman->create_table($table);
         }
@@ -49,40 +37,33 @@ function xmldb_local_autorestrict_upgrade($oldversion) {
     }
     
     if ($oldversion < 2025120400) {
-        // Add section-based difficulty requirements fields.
         $table = new xmldb_table('local_autorestrict_course');
         
-        // Section diff1 for diff2.
         $field = new xmldb_field('section_min_diff1_for_diff2', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'min_diff3_for_diff4');
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
         
-        // Section diff1 for diff3.
         $field = new xmldb_field('section_min_diff1_for_diff3', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff1_for_diff2');
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
         
-        // Section diff2 for diff3.
         $field = new xmldb_field('section_min_diff2_for_diff3', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff1_for_diff3');
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
         
-        // Section diff1 for diff4.
         $field = new xmldb_field('section_min_diff1_for_diff4', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff2_for_diff3');
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
         
-        // Section diff2 for diff4.
         $field = new xmldb_field('section_min_diff2_for_diff4', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff1_for_diff4');
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
         
-        // Section diff3 for diff4.
         $field = new xmldb_field('section_min_diff3_for_diff4', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'section_min_diff2_for_diff4');
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);

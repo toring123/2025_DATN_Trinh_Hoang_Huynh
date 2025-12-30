@@ -1,58 +1,34 @@
 <?php
-/**
- * Availability condition based on difficulty level completion counts
- *
- * @package    availability_diffcomplete
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace availability_diffcomplete;
 
 defined('MOODLE_INTERNAL') || die();
 
 class condition extends \core_availability\condition {
     
-    /** @var int Minimum diff1 completions (whole course) */
     protected $diff1;
     
-    /** @var int Minimum diff2 completions (whole course) */
     protected $diff2;
     
-    /** @var int Minimum diff3 completions (whole course) */
     protected $diff3;
     
-    /** @var int Minimum diff4 completions (whole course) */
     protected $diff4;
     
-    /** @var int|null Section number for section-based requirements */
     protected $section;
     
-    /** @var int Minimum diff1 completions in section */
     protected $sectiondiff1;
     
-    /** @var int Minimum diff2 completions in section */
     protected $sectiondiff2;
     
-    /** @var int Minimum diff3 completions in section */
     protected $sectiondiff3;
     
-    /** @var int Minimum diff4 completions in section */
     protected $sectiondiff4;
-    
-    /**
-     * Constructor
-     *
-     * @param \stdClass $structure Data structure from JSON decode
-     */
+
     public function __construct($structure) {
-        // Course-wide requirements
         $this->diff1 = isset($structure->diff1) ? (int)$structure->diff1 : 0;
         $this->diff2 = isset($structure->diff2) ? (int)$structure->diff2 : 0;
         $this->diff3 = isset($structure->diff3) ? (int)$structure->diff3 : 0;
         $this->diff4 = isset($structure->diff4) ? (int)$structure->diff4 : 0;
         
-        // Section-based requirements
         $this->section = isset($structure->section) ? (int)$structure->section : null;
         $this->sectiondiff1 = isset($structure->sectiondiff1) ? (int)$structure->sectiondiff1 : 0;
         $this->sectiondiff2 = isset($structure->sectiondiff2) ? (int)$structure->sectiondiff2 : 0;
@@ -60,11 +36,6 @@ class condition extends \core_availability\condition {
         $this->sectiondiff4 = isset($structure->sectiondiff4) ? (int)$structure->sectiondiff4 : 0;
     }
     
-    /**
-     * Save the data
-     *
-     * @return \stdClass Structure to save
-     */
     public function save() {
         $data = (object)[
             'type' => 'diffcomplete',
@@ -74,7 +45,6 @@ class condition extends \core_availability\condition {
             'diff4' => $this->diff4
         ];
         
-        // Add section-based requirements if any
         if ($this->section !== null) {
             $data->section = $this->section;
             $data->sectiondiff1 = $this->sectiondiff1;
@@ -86,39 +56,16 @@ class condition extends \core_availability\condition {
         return $data;
     }
     
-    /**
-     * Check if user is available
-     *
-     * @param bool $not Set true if we are inverting the condition
-     * @param \core_availability\info $info Item we're checking
-     * @param bool $grabthelot Performance hint
-     * @param int $userid User ID to check availability for
-     * @return bool True if available
-     */
     public function is_available($not, \core_availability\info $info, $grabthelot, $userid) {
         $course = $info->get_course();
-        // Reuse bulk counting even for single user to keep logic identical to user-list path
         $users = [$userid => true];
         $filtered = $this->filter_user_list($users, $not, $info, null);
         return array_key_exists($userid, $filtered);
     }
     
-    /**
-     * Get number of completed activities with a specific tag
-     * Considers both:
-     * 1. Activities with completion tracking that are marked complete
-     * 2. Activities with no completion tracking but have submissions
-     *
-     * @param int $courseid Course ID
-     * @param string $tagname Tag name
-     * @param int $userid User ID
-     * @param int|null $sectionnumber Section number to limit to (null = whole course)
-     * @return int Number of completed activities
-     */
     protected function get_tag_completion_count($courseid, $tagname, $userid, $sectionnumber = null) {
         global $DB;
         
-        // Part 1: Count activities with completion tracking that are complete
         $params1 = [
             'courseid' => $courseid,
             'userid' => $userid,
@@ -145,7 +92,6 @@ class condition extends \core_availability\condition {
         
         $completedWithTracking = $DB->get_fieldset_sql($sql1, $params1);
         
-        // Part 2: Count activities with NO completion tracking but have submissions
         $params2 = [
             'courseid' => $courseid,
             'userid' => $userid,
@@ -171,7 +117,6 @@ class condition extends \core_availability\condition {
         
         $noTrackingModules = $DB->get_records_sql($sql2, $params2);
         
-        // Check each no-tracking module for submissions
         $completedNoTracking = [];
         foreach ($noTrackingModules as $cm) {
             if ($this->has_user_submission($cm->id, $userid)) {
@@ -179,24 +124,14 @@ class condition extends \core_availability\condition {
             }
         }
         
-        // Merge and count unique IDs
         $allCompleted = array_unique(array_merge($completedWithTracking, $completedNoTracking));
         
         return count($allCompleted);
     }
     
-    /**
-     * Check if user has made a submission for a course module
-     * Supports: assign, quiz, forum, workshop, glossary, data, wiki, lesson
-     *
-     * @param int $cmid Course module ID
-     * @param int $userid User ID
-     * @return bool True if user has submission
-     */
     protected function has_user_submission($cmid, $userid) {
         global $DB;
         
-        // Get module info
         $cm = $DB->get_record_sql("
             SELECT cm.id, cm.instance, m.name as modname
             FROM {course_modules} cm
@@ -210,21 +145,18 @@ class condition extends \core_availability\condition {
         
         switch ($cm->modname) {
             case 'assign':
-                // Check assign_submission table
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {assign_submission}
                     WHERE assignment = :instance AND userid = :userid AND status = 'submitted'
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'quiz':
-                // Check quiz_attempts table for finished attempts
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {quiz_attempts}
                     WHERE quiz = :instance AND userid = :userid AND state = 'finished'
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'forum':
-                // Check forum_posts for any posts by user
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {forum_posts} fp
                     JOIN {forum_discussions} fd ON fd.id = fp.discussion
@@ -232,28 +164,24 @@ class condition extends \core_availability\condition {
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'workshop':
-                // Check workshop_submissions
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {workshop_submissions}
                     WHERE workshopid = :instance AND authorid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'glossary':
-                // Check glossary_entries
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {glossary_entries}
                     WHERE glossaryid = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'data':
-                // Check data_records
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {data_records}
                     WHERE dataid = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'wiki':
-                // Check wiki contributions
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {wiki_versions} wv
                     JOIN {wiki_pages} wp ON wp.id = wv.pageid
@@ -262,49 +190,42 @@ class condition extends \core_availability\condition {
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'lesson':
-                // Check lesson_attempts
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {lesson_attempts}
                     WHERE lessonid = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'scorm':
-                // Check scorm_scoes_track
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {scorm_scoes_track}
                     WHERE scormid = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'h5pactivity':
-                // Check h5pactivity_attempts
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {h5pactivity_attempts}
                     WHERE h5pactivityid = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'choice':
-                // Check choice_answers
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {choice_answers}
                     WHERE choiceid = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'feedback':
-                // Check feedback_completed
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {feedback_completed}
                     WHERE feedback = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             case 'survey':
-                // Check survey_answers
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {survey_answers}
                     WHERE survey = :instance AND userid = :userid
                 ", ['instance' => $cm->instance, 'userid' => $userid]);
                 
             default:
-                // For unsupported modules, check if viewed (log)
                 return $DB->record_exists_sql("
                     SELECT 1 FROM {logstore_standard_log}
                     WHERE contextinstanceid = :cmid 
@@ -314,19 +235,10 @@ class condition extends \core_availability\condition {
                 ", ['cmid' => $cmid, 'contextlevel' => CONTEXT_MODULE, 'userid' => $userid]);
         }
     }
-    
-    /**
-     * Get description of restriction
-     *
-     * @param bool $full Set true if this is the 'full information' view
-     * @param bool $not Set true if we are inverting the condition
-     * @param \core_availability\info $info Item we're checking
-     * @return string Information string about restriction
-     */
+
     public function get_description($full, $not, \core_availability\info $info) {
         $parts = [];
         
-        // Course-wide requirements
         $courseReqs = [];
         if ($this->diff1 > 0) {
             $courseReqs[] = "diff1: {$this->diff1}";
@@ -344,7 +256,6 @@ class condition extends \core_availability\condition {
             $parts[] = implode(', ', $courseReqs) . ' ' . get_string('incourse', 'availability_diffcomplete');
         }
         
-        // Section-based requirements
         if ($this->section !== null) {
             $sectionReqs = [];
             if ($this->sectiondiff1 > 0) {
@@ -373,11 +284,6 @@ class condition extends \core_availability\condition {
         }
     }
     
-    /**
-     * Get debug string
-     *
-     * @return string Debug string
-     */
     protected function get_debug_string() {
         $debug = "course[diff1:{$this->diff1} diff2:{$this->diff2} diff3:{$this->diff3} diff4:{$this->diff4}]";
         if ($this->section !== null) {
@@ -386,24 +292,10 @@ class condition extends \core_availability\condition {
         return $debug;
     }
     
-    /**
-     * Check if this condition applies to user lists
-     *
-     * @return bool True if this condition applies to user lists
-     */
     public function is_applied_to_user_lists() {
         return true;
     }
     
-    /**
-     * Filter the user list
-     *
-     * @param array $users Array of users
-     * @param bool $not True if condition is negated
-     * @param \core_availability\info $info Info about item
-     * @param \core_availability\capability_checker $checker Capability checker
-     * @return array Filtered array of users
-     */
         public function filter_user_list(array $users, $not, \core_availability\info $info,
             ?\core_availability\capability_checker $checker = null) {
         if (empty($users)) {
@@ -413,7 +305,6 @@ class condition extends \core_availability\condition {
         $course = $info->get_course();
         $userids = array_keys($users);
 
-        // Collect all tag/section combinations we need
         $requirements = [];
         foreach (['diff1', 'diff2', 'diff3', 'diff4'] as $tag) {
             if ($this->$tag > 0) {
@@ -433,7 +324,6 @@ class condition extends \core_availability\condition {
             return $users;
         }
 
-        // Precompute counts per (tag, section) for all users in bulk to avoid N+1 queries
         $countsCache = [];
         foreach ($requirements as [$tag, $section, $min]) {
             $countsCache[$tag . '|' . ($section === null ? 'all' : $section)] =
@@ -466,16 +356,6 @@ class condition extends \core_availability\condition {
         return $result;
     }
 
-    /**
-     * Bulk count completions for a tag for a list of users, optionally limited to a section.
-     * Counts both completion-tracking activities and non-tracking activities with submissions.
-     *
-     * @param int $courseid
-     * @param array $userids
-     * @param string $tagname
-     * @param int|null $sectionnumber
-     * @return array userid => count
-     */
     protected function bulk_tag_counts(int $courseid, array $userids, string $tagname, ?int $sectionnumber): array {
         global $DB;
 
@@ -483,7 +363,6 @@ class condition extends \core_availability\condition {
             return [];
         }
 
-        // Part 1: completion tracking activities (uses course_modules_completion)
         list($userSql, $userParams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
         $params = [
             'courseid' => $courseid,
@@ -509,10 +388,8 @@ class condition extends \core_availability\condition {
 
         $trackingCounts = $DB->get_records_sql_menu($sql . ' GROUP BY cmc.userid', $params);
 
-        // Part 2: activities with no completion tracking but submissions
         $submissionCounts = $this->bulk_submission_counts($courseid, $userids, $tagname, $sectionnumber);
 
-        // Merge counts
         $result = [];
         foreach ($userids as $uid) {
             $result[$uid] = (int)($trackingCounts[$uid] ?? 0) + (int)($submissionCounts[$uid] ?? 0);
@@ -521,15 +398,6 @@ class condition extends \core_availability\condition {
         return $result;
     }
 
-    /**
-     * Bulk submission counts for completion-none activities with a given tag.
-     *
-     * @param int $courseid
-     * @param array $userids
-     * @param string $tagname
-     * @param int|null $sectionnumber
-     * @return array userid => count
-     */
     protected function bulk_submission_counts(int $courseid, array $userids, string $tagname, ?int $sectionnumber): array {
         global $DB;
 
@@ -539,7 +407,6 @@ class condition extends \core_availability\condition {
 
         list($userSql, $userParams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 
-        // First, find all completion-none course modules matching the tag (and section if provided)
         $params = [
             'courseid' => $courseid,
             'completionnone' => COMPLETION_TRACKING_NONE,
@@ -564,7 +431,6 @@ class condition extends \core_availability\condition {
             return [];
         }
 
-        // Group module IDs by module name for targeted submission queries
         $byMod = [];
         foreach ($modules as $cm) {
             $byMod[$cm->modname][] = $cm;
@@ -720,7 +586,6 @@ class condition extends \core_availability\condition {
             }
         }
 
-        // Ensure all users appear in result (missing users = 0)
         foreach ($userids as $uid) {
             if (!isset($aggregate[$uid])) {
                 $aggregate[$uid] = 0;

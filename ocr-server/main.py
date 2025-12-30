@@ -8,7 +8,7 @@ from PIL import Image
 import numpy as np
 import logging
 import os
-import fitz  # PyMuPDF
+import fitz
 
 from ocr_engine import reader
 
@@ -86,7 +86,7 @@ async def ocr_endpoint(request: Request):
             logger.error(f"Lỗi khi OCR ảnh {file.filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"OCR lỗi tại ảnh {file.filename}: {str(e)}")
 
-    full_text = " ".join(all_texts) # Dùng xuống dòng để tách nội dung giữa các trang ảnh
+    full_text = " ".join(all_texts)
 
     return OCRResponse(
         text=full_text.strip()
@@ -103,10 +103,8 @@ async def ocr_pdf_endpoint(file: UploadFile = File(...)):
     logger.info(f"--> Đang xử lý PDF: {file.filename}")
     
     try:
-        # Đọc nội dung file
         pdf_bytes = await file.read()
         
-        # Mở PDF từ bytes
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         
         if len(doc) == 0:
@@ -117,18 +115,14 @@ async def ocr_pdf_endpoint(file: UploadFile = File(...)):
         for page_num, page in enumerate(doc):
             logger.info(f"Đang xử lý trang {page_num + 1}/{len(doc)}")
             
-            # Render trang thành ảnh với độ phân giải cao (2x)
             mat = fitz.Matrix(2, 2)
             pix = page.get_pixmap(matrix=mat)
             
-            # Chuyển pixmap thành numpy array
             img_data = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
             
-            # Nếu là RGBA, chuyển thành RGB
             if pix.n == 4:
                 img_data = img_data[..., :3]
             
-            # OCR
             result = reader.readtext(img_data, detail=0)
             
             page_text = " ".join(result)

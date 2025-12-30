@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for section grade condition
- *
- * @package    availability_sectiongrade
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Hạn chế theo điểm trung bình chương';
 $string['title'] = 'Điểm chương';
 $string['description'] = 'Yêu cầu học viên đạt điểm trung bình tối thiểu trong một chương cụ thể.';

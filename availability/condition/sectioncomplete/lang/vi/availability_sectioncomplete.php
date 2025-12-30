@@ -1,12 +1,4 @@
 <?php
-/**
- * Language strings for section completion condition
- *
- * @package    availability_sectioncomplete
- * @copyright  2025
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 $string['pluginname'] = 'Hạn chế theo hoàn thành chương';
 $string['title'] = 'Hoàn thành chương';
 $string['description'] = 'Yêu cầu học viên hoàn thành một số lượng hoạt động tối thiểu trong một chương cụ thể.';
