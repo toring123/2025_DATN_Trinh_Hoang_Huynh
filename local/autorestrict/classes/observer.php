@@ -27,9 +27,9 @@ class observer {
      *
      * @param \core\event\course_module_updated $event
      */
-    public static function course_module_updated(\core\event\course_module_updated $event) {
-        self::apply_restriction_to_module($event->objectid, $event->courseid);
-    }
+    // public static function course_module_updated(\core\event\course_module_updated $event) {
+    //     self::apply_restriction_to_module($event->objectid, $event->courseid);
+    // }
     
     /**
      * Apply restriction to a single module

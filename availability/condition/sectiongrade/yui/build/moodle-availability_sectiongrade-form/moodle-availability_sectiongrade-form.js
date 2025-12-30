@@ -15,7 +15,7 @@ M.availability_sectiongrade.form.getNode = function(json) {
                '</span> <select class="custom-select" name="section" title="' + 
                M.util.get_string('section', 'availability_sectiongrade') + '">';
     
-    html += '<option value="">Choose...</option>';
+    html += '<option value="">' + M.util.get_string('choose', 'availability_sectiongrade') + '</option>';
     
     if (this.sections) {
         for (var i = 0; i < this.sections.length; i++) {

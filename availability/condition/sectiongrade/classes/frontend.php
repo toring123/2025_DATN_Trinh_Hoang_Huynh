@@ -19,7 +19,7 @@ class frontend extends \core_availability\frontend {
      * @return array Array of strings for JavaScript
      */
     protected function get_javascript_strings() {
-        return ['section', 'mingrade', 'error_invalidsection', 'title', 'description'];
+        return ['section', 'mingrade', 'error_invalidsection', 'title', 'description', 'choose'];
     }
     
     /**

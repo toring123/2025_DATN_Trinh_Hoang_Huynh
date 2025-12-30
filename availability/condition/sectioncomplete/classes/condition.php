@@ -58,16 +58,10 @@ class condition extends \core_availability\condition {
      * @return bool True if available
      */
     public function is_available($not, \core_availability\info $info, $grabthelot, $userid) {
-        $course = $info->get_course();
-        $completedcount = $this->get_section_completion_count($course->id, $this->sectionnumber, $userid);
-        
-        $allow = ($completedcount >= $this->mincompletions);
-        
-        if ($not) {
-            $allow = !$allow;
-        }
-        
-        return $allow;
+        // Reuse bulk path to keep logic identical and avoid extra DB calls.
+        $users = [$userid => true];
+        $filtered = $this->filter_user_list($users, $not, $info, null);
+        return array_key_exists($userid, $filtered);
     }
     
     /**
@@ -79,52 +73,9 @@ class condition extends \core_availability\condition {
      * @return int Number of completed activities
      */
     protected function get_section_completion_count($courseid, $sectionnumber, $userid) {
-        global $DB;
-        
-        // First, get all course modules in the section
-        $sql = "SELECT cm.id, cm.module, cm.instance, cm.completion
-                FROM {course_modules} cm
-                JOIN {course_sections} cs ON cs.id = cm.section
-                WHERE cm.course = :courseid
-                AND cs.section = :sectionnumber
-                AND cm.deletioninprogress = 0";
-        
-        $cms = $DB->get_records_sql($sql, [
-            'courseid' => $courseid,
-            'sectionnumber' => $sectionnumber
-        ]);
-        
-        if (empty($cms)) {
-            return 0;
-        }
-        
-        $completedcount = 0;
-        
-        foreach ($cms as $cm) {
-            $iscompleted = false;
-            
-            // Check if activity has completion tracking enabled
-            if ($cm->completion > 0) {
-                // Check completion table
-                $completion = $DB->get_record('course_modules_completion', [
-                    'coursemoduleid' => $cm->id,
-                    'userid' => $userid
-                ]);
-                
-                if ($completion && $completion->completionstate >= COMPLETION_COMPLETE) {
-                    $iscompleted = true;
-                }
-            } else {
-                // For activities without completion tracking, check if they have submissions
-                $iscompleted = $this->has_user_submission($cm, $userid);
-            }
-            
-            if ($iscompleted) {
-                $completedcount++;
-            }
-        }
-        
-        return $completedcount;
+        // Kept for compatibility; reuse bulk function for a single user
+        $counts = $this->bulk_section_completion_counts($courseid, $sectionnumber, [$userid]);
+        return (int)($counts[$userid] ?? 0);
     }
     
     /**
@@ -258,28 +209,278 @@ class condition extends \core_availability\condition {
      * @return array Filtered array of users
      */
     public function filter_user_list(array $users, $not, \core_availability\info $info,
-            \core_availability\capability_checker $checker) {
-        
+            ?\core_availability\capability_checker $checker = null) {
         if (empty($users)) {
             return $users;
         }
-        
+
         $course = $info->get_course();
+        $userids = array_keys($users);
+
+        // Bulk compute completion counts for this section for all users at once.
+        $counts = $this->bulk_section_completion_counts($course->id, $this->sectionnumber, $userids);
+
         $result = [];
-        
         foreach ($users as $userid => $user) {
-            $completedcount = $this->get_section_completion_count($course->id, $this->sectionnumber, $userid);
+            $completedcount = (int)($counts[$userid] ?? 0);
             $meets = ($completedcount >= $this->mincompletions);
-            
+
             if ($not) {
                 $meets = !$meets;
             }
-            
+
             if ($meets) {
                 $result[$userid] = $user;
             }
         }
-        
+
         return $result;
+    }
+
+    /**
+     * Bulk completion count per user for a section.
+     * Counts both completion-tracking activities and non-tracking with submissions.
+     *
+     * @param int $courseid
+     * @param int $sectionnumber
+     * @param array $userids
+     * @return array userid => count
+     */
+    protected function bulk_section_completion_counts(int $courseid, int $sectionnumber, array $userids): array {
+        global $DB;
+
+        if (empty($userids)) {
+            return [];
+        }
+
+        list($userSql, $userParams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+
+        // Part 1: completion-tracking activities
+        $params = [
+            'courseid' => $courseid,
+            'sectionnumber' => $sectionnumber,
+            'completionstate' => COMPLETION_COMPLETE
+        ] + $userParams;
+
+        $sql = "SELECT cmc.userid, COUNT(DISTINCT cm.id) AS cnt
+                FROM {course_modules} cm
+                JOIN {course_sections} cs ON cs.id = cm.section
+                JOIN {course_modules_completion} cmc ON cmc.coursemoduleid = cm.id AND cmc.userid $userSql
+                WHERE cm.course = :courseid
+                  AND cs.section = :sectionnumber
+                  AND cm.completion > 0
+                  AND cmc.completionstate >= :completionstate
+                  AND cm.deletioninprogress = 0
+                GROUP BY cmc.userid";
+
+        $trackingCounts = $DB->get_records_sql_menu($sql, $params);
+
+        // Part 2: completion-none activities with submissions
+        $submissionCounts = $this->bulk_section_submission_counts($courseid, $sectionnumber, $userids, $userSql, $userParams);
+
+        // Merge counts
+        $result = [];
+        foreach ($userids as $uid) {
+            $result[$uid] = (int)($trackingCounts[$uid] ?? 0) + (int)($submissionCounts[$uid] ?? 0);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Bulk submission counts for completion-none activities in a section.
+     *
+     * @param int $courseid
+     * @param int $sectionnumber
+     * @param array $userids
+     * @param string $userSql
+     * @param array $userParams
+     * @return array userid => count
+     */
+    protected function bulk_section_submission_counts(int $courseid, int $sectionnumber, array $userids, string $userSql, array $userParams): array {
+        global $DB;
+
+        $params = [
+            'courseid' => $courseid,
+            'sectionnumber' => $sectionnumber,
+            'completionnone' => COMPLETION_TRACKING_NONE
+        ];
+
+        // Fetch completion-none modules in the section
+        $modules = $DB->get_records_sql("SELECT cm.id, cm.instance, m.name AS modname
+                                         FROM {course_modules} cm
+                                         JOIN {modules} m ON m.id = cm.module
+                                         JOIN {course_sections} cs ON cs.id = cm.section
+                                         WHERE cm.course = :courseid
+                                           AND cs.section = :sectionnumber
+                                           AND cm.completion = :completionnone
+                                           AND cm.deletioninprogress = 0", $params);
+
+        if (empty($modules)) {
+            return [];
+        }
+
+        $byMod = [];
+        foreach ($modules as $cm) {
+            $byMod[$cm->modname][] = $cm;
+        }
+
+        $aggregate = [];
+
+        foreach ($byMod as $modname => $cmlist) {
+            $instanceIds = array_map(static function($cm) { return $cm->instance; }, $cmlist);
+
+            switch ($modname) {
+                case 'assign': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'a');
+                    $sqlSubmit = "SELECT s.userid, COUNT(DISTINCT s.assignment) AS cnt
+                                  FROM {assign_submission} s
+                                  WHERE s.assignment $in
+                                    AND s.userid $userSql
+                                    AND s.status = 'submitted'
+                                  GROUP BY s.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'quiz': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'q');
+                    $sqlSubmit = "SELECT qa.userid, COUNT(DISTINCT qa.quiz) AS cnt
+                                  FROM {quiz_attempts} qa
+                                  WHERE qa.quiz $in
+                                    AND qa.userid $userSql
+                                    AND qa.state = 'finished'
+                                  GROUP BY qa.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'forum': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'f');
+                    $sqlSubmit = "SELECT fp.userid, COUNT(DISTINCT fd.forum) AS cnt
+                                  FROM {forum_posts} fp
+                                  JOIN {forum_discussions} fd ON fd.id = fp.discussion
+                                  WHERE fd.forum $in
+                                    AND fp.userid $userSql
+                                  GROUP BY fp.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'workshop': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'w');
+                    $sqlSubmit = "SELECT ws.authorid AS userid, COUNT(DISTINCT ws.workshopid) AS cnt
+                                  FROM {workshop_submissions} ws
+                                  WHERE ws.workshopid $in
+                                    AND ws.authorid $userSql
+                                  GROUP BY ws.authorid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'choice': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'c');
+                    $sqlSubmit = "SELECT ca.userid, COUNT(DISTINCT ca.choiceid) AS cnt
+                                  FROM {choice_answers} ca
+                                  WHERE ca.choiceid $in
+                                    AND ca.userid $userSql
+                                  GROUP BY ca.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'feedback': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'fb');
+                    $sqlSubmit = "SELECT fc.userid, COUNT(DISTINCT fc.feedback) AS cnt
+                                  FROM {feedback_completed} fc
+                                  WHERE fc.feedback $in
+                                    AND fc.userid $userSql
+                                  GROUP BY fc.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'survey': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'sv');
+                    $sqlSubmit = "SELECT sa.userid, COUNT(DISTINCT sa.survey) AS cnt
+                                  FROM {survey_answers} sa
+                                  WHERE sa.survey $in
+                                    AND sa.userid $userSql
+                                  GROUP BY sa.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'lesson': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'l');
+                    $sqlSubmit = "SELECT la.userid, COUNT(DISTINCT la.lessonid) AS cnt
+                                  FROM {lesson_attempts} la
+                                  WHERE la.lessonid $in
+                                    AND la.userid $userSql
+                                  GROUP BY la.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'data': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'd');
+                    $sqlSubmit = "SELECT dr.userid, COUNT(DISTINCT dr.dataid) AS cnt
+                                  FROM {data_records} dr
+                                  WHERE dr.dataid $in
+                                    AND dr.userid $userSql
+                                  GROUP BY dr.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'glossary': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'g');
+                    $sqlSubmit = "SELECT ge.userid, COUNT(DISTINCT ge.glossaryid) AS cnt
+                                  FROM {glossary_entries} ge
+                                  WHERE ge.glossaryid $in
+                                    AND ge.userid $userSql
+                                  GROUP BY ge.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'wiki': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'wk');
+                    $sqlSubmit = "SELECT wp.userid, COUNT(DISTINCT ws.wikiid) AS cnt
+                                  FROM {wiki_pages} wp
+                                  JOIN {wiki_subwikis} ws ON ws.id = wp.subwikiid
+                                  WHERE ws.wikiid $in
+                                    AND wp.userid $userSql
+                                  GROUP BY wp.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'chat': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'ch');
+                    $sqlSubmit = "SELECT cm.userid, COUNT(DISTINCT cm.chatid) AS cnt
+                                  FROM {chat_messages} cm
+                                  WHERE cm.chatid $in
+                                    AND cm.userid $userSql
+                                  GROUP BY cm.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                case 'h5pactivity': {
+                    list($in, $p) = $DB->get_in_or_equal($instanceIds, SQL_PARAMS_NAMED, 'h');
+                    $sqlSubmit = "SELECT ha.userid, COUNT(DISTINCT ha.h5pactivityid) AS cnt
+                                  FROM {h5pactivity_attempts} ha
+                                  WHERE ha.h5pactivityid $in
+                                    AND ha.userid $userSql
+                                  GROUP BY ha.userid";
+                    $rows = $DB->get_records_sql_menu($sqlSubmit, $p + $userParams);
+                    break;
+                }
+                default:
+                    $rows = [];
+            }
+
+            foreach ($rows as $uid => $cnt) {
+                $aggregate[$uid] = ($aggregate[$uid] ?? 0) + (int)$cnt;
+            }
+        }
+
+        // Ensure all users appear in result
+        foreach ($userids as $uid) {
+            if (!isset($aggregate[$uid])) {
+                $aggregate[$uid] = 0;
+            }
+        }
+
+        return $aggregate;
     }
 }
