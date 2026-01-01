@@ -26,6 +26,26 @@ Dữ liệu của Moodle và Database được lưu trữ bền vững (persist)
 * moodle_data: Source code của Moodle.
 * moodledata_data: File upload và session data của Moodle.
 
+## Cách cài đặt plugin vào Moodle
+
+Để cài đặt các plugin tự phát triển vào hệ thống Moodle đang chạy trên Docker, thực hiện các bước sau:
+
+### Bước 1: Copy mã nguồn vào Container
+Mở Terminal (CMD hoặc PowerShell) và chạy lần lượt các lệnh sau để copy folder plugin vào đúng vị trí trong container Moodle:
+
+
+**1. Copy Plugin loại Local:**
+```bash
+docker cp (đường dẫn thư mục lưu project)\local\autograding moodle-app:/bitnami/moodle/local/
+docker cp (đường dẫn thư mục lưu project)\local\autorestrict moodle-app:/bitnami/moodle/local/
+```
+**2. Copy Plugin loại Availability Condition:**
+```bash
+docker cp (đường dẫn thư mục lưu project)\availability\condition\diffcomplete moodle-app:/bitnami/moodle/availability/condition/
+docker cp (đường dẫn thư mục lưu project)\availability\condition\sectioncomplete moodle-app:/bitnami/moodle/availability/condition/
+docker cp (đường dẫn thư mục lưu project)\availability\condition\sectiongrade moodle-app:/bitnami/moodle/availability/condition/
+```
+
 ## Cách thiết lập server OCR
 
 Mở Terminal tại thư mục ocr-server, gõ lệnh sau để tạo thư mục lưu model (nếu chưa có):
