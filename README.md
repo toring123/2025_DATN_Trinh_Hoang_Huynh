@@ -32,8 +32,6 @@ Dữ liệu của Moodle và Database được lưu trữ bền vững (persist)
 
 ### Bước 1: Copy mã nguồn vào Container
 Mở Terminal (CMD hoặc PowerShell) và chạy lần lượt các lệnh sau để copy folder plugin vào đúng vị trí trong container Moodle:
-
-
 **1. Copy Plugin loại Local:**
 ```bash
 docker cp (đường dẫn thư mục lưu project)\local\autograding moodle-app:/bitnami/moodle/local/
