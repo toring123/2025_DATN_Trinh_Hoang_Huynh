@@ -69,7 +69,8 @@ class condition extends \core_availability\condition {
         $params1 = [
             'courseid' => $courseid,
             'userid' => $userid,
-            'completionstate' => COMPLETION_COMPLETE,
+            'completionstate_complete' => COMPLETION_COMPLETE,
+            'completionstate_pass' => COMPLETION_COMPLETE_PASS,
             'tagname' => $tagname
         ];
         
@@ -81,7 +82,7 @@ class condition extends \core_availability\condition {
                 JOIN {course_sections} cs ON cs.id = cm.section
                 WHERE cm.course = :courseid
                 AND cmc.userid = :userid
-                AND cmc.completionstate >= :completionstate
+                AND (cmc.completionstate = :completionstate_complete OR cmc.completionstate = :completionstate_pass)
                 AND ti.itemtype = 'course_modules'
                 AND t.name = :tagname";
         
@@ -367,7 +368,8 @@ class condition extends \core_availability\condition {
         $params = [
             'courseid' => $courseid,
             'tagname' => $tagname,
-            'completionstate' => COMPLETION_COMPLETE
+            'completionstate_complete' => COMPLETION_COMPLETE,
+            'completionstate_pass' => COMPLETION_COMPLETE_PASS
         ] + $userParams;
 
         $sql = "SELECT cmc.userid, COUNT(DISTINCT cm.id) AS cnt
@@ -378,7 +380,7 @@ class condition extends \core_availability\condition {
                 JOIN {course_sections} cs ON cs.id = cm.section
                 WHERE cm.course = :courseid
                   AND cm.completion > 0
-                  AND cmc.completionstate >= :completionstate
+                  AND (cmc.completionstate = :completionstate_complete OR cmc.completionstate = :completionstate_pass)
                   AND t.name = :tagname";
 
         if ($sectionnumber !== null) {
