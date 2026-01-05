@@ -479,6 +479,7 @@ class llm_service
             }
 
             $responseData = json_decode($responseBody, true);
+            mtrace("[LLM SERVICE] API Response: " . json_encode($responseData, JSON_UNESCAPED_UNICODE));
 
             if (json_last_error() !== JSON_ERROR_NONE) {
                 mtrace("[LLM SERVICE] JSON decode error: " . json_last_error_msg());
@@ -552,6 +553,7 @@ class llm_service
 
     private static function parse_grading_response(string $responseText): ?array
     {
+        $originalResponse = $responseText;
         $responseText = trim($responseText);
 
         $responseText = preg_replace('/^```(?:json)?\s*/i', '', $responseText);
@@ -567,8 +569,18 @@ class llm_service
         }
 
         if (json_last_error() !== JSON_ERROR_NONE || !isset($data['grade'])) {
-            mtrace("[LLM SERVICE] Failed to parse grading response: " . json_last_error_msg());
-            return null;
+            $errorDetail = json_last_error_msg();
+            $truncatedResponse = mb_substr($originalResponse, 0, 200);
+            mtrace("[LLM SERVICE] Failed to parse grading response: {$errorDetail}");
+            mtrace("[LLM SERVICE] Raw response (truncated): {$truncatedResponse}");
+            
+            throw new \moodle_exception(
+                'invalidjsonresponse',
+                'local_autograding',
+                '',
+                null,
+                "LLM returned invalid JSON format. Error: {$errorDetail}. Response: {$truncatedResponse}..."
+            );
         }
 
         $grade = (float) $data['grade'];

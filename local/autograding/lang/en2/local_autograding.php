@@ -136,6 +136,7 @@ $string['autograding:viewprogress'] = 'View AI grading progress';
 $string['autograding:manage'] = 'Manage autograding settings';
 
 $string['servererror'] = 'Server error occurred';
+$string['invalidjsonresponse'] = 'LLM returned invalid JSON format';
 
 $string['check_connection'] = 'Check Connection';
 $string['checking_connection'] = 'Checking...';
