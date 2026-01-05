@@ -346,7 +346,13 @@ class llm_service
 
             if ($curlError) {
                 mtrace("[LLM SERVICE] Gemini API curl error: {$curlError}");
-                return null;
+                throw new \moodle_exception(
+                    'servererror',
+                    'local_autograding',
+                    '',
+                    null,
+                    'LLM server connection failed: ' . $curlError
+                );
             }
 
             mtrace("[LLM SERVICE] HTTP Response Code: " . $httpcode);
@@ -444,7 +450,13 @@ class llm_service
 
             if ($curlError) {
                 mtrace("[LLM SERVICE] Qwen API curl error: {$curlError}");
-                return null;
+                throw new \moodle_exception(
+                    'servererror',
+                    'local_autograding',
+                    '',
+                    null,
+                    'LLM server connection failed: ' . $curlError
+                );
             }
 
             mtrace("[LLM SERVICE] HTTP Response Code: " . $httpcode);
