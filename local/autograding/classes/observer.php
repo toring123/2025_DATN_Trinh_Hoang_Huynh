@@ -150,6 +150,8 @@ class observer
 
             error_log("[AUTOGRADING] Autograding is enabled, queueing adhoc task...");
 
+            grading_status::reset_for_retry($submissionid);
+
             $taskdata = new \stdClass();
             $taskdata->cmid = $cmid;
             $taskdata->userid = $userid;
